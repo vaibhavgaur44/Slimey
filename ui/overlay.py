@@ -1,69 +1,34 @@
 """
-Clicky's blue buddy cursor — faithful port of the original macOS overlay.
+Clicky's blue buddy cursor â€” faithful port of the original macOS overlay.
 
 Matches clicky-main/leanring-buddy/OverlayWindow.swift:
-  - Flat solid blue equilateral triangle (#3380FF), 16×16, rotated -35°
+  - Flat solid blue equilateral triangle (#3380FF), 16Ã—16, rotated -35Â°
   - Sits at (+35, +25) relative to the real cursor
   - Soft blue drop shadow (radius ~8)
   - States cross-fade in place:
-      idle / speaking → triangle
-      listening       → 5-bar waveform
-      thinking        → rotating arc spinner
-      pointing        → triangle + speech bubble ("found it!" etc.)
+      idle / speaking â†’ triangle
+      listening       â†’ 5-bar waveform
+      thinking        â†’ rotating arc spinner
+      pointing        â†’ triangle + speech bubble ("found it!" etc.)
 """
 
 import math
 import random
 import time
 from typing import Optional
+from pathlib import Path
 
 from PyQt6.QtWidgets import QWidget, QApplication
 from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF
 from PyQt6.QtGui import (
-    QPainter, QColor, QPen, QBrush, QPainterPath, QCursor, QFont, QPixmap,
+    QPainter, QColor, QPen, QBrush, QPainterPath, QCursor, QFont, QPixmap
 )
-
-
-def _slimy_asset_path() -> Path:
-    """Resolve assets/slimy/slimy_buddy.png relative to the project root.
-
-    Works whether the app runs from the repo checkout or from a portable
-    folder, without adding any dependency.
-    """
-# SLIMEY character sprite, loaded once during CursorOverlay.__init__.
-# Repo-relative so the app works from the checkout without extra config.
-_SLIMEY_BUDDY_PATH = (
-    Path(__file__).resolve().parent.parent / "assets" / "slimy" / "slimy_buddy.png"
-)
-
-
-def _slimy_asset_path() -> Path:
-    """Return the repo-relative SLIMEY character sprite path."""
-    return _SLIMEY_BUDDY_PATH
 
 
 MODE_IDLE      = "idle"
 MODE_LISTENING = "listening"
 MODE_THINKING  = "thinking"
 MODE_SPEAKING  = "speaking"
-
-
-# ── [SLIMEY first-commit visual replacement] ──
-# Replaces the Clicky triangle with assets/slimy/slimy_buddy.png.
-# Idle + Speaking share one render path. Aura + active visualizer become lime.
-# NO global CURSOR_BLUE replacement; only per-element visuals change.
-
-# [SLIMEY] center of the on-screen buddy (used as the anchor for the asset).
-SLIMEY_BUDDY_ANCHOR = QPointF(0, 0)
-
-# Draw the SLIMEY PNG scaled to match the original cursor footprint.
-# Original: 16px triangle. Use a scale so the asset's own width stays
-# clearly readable but doesn't take over the screen.
-# The asset is ~1.2:1 (1375x1144). Map its natural 200px square footprint
-# onto the ~16px cursor box, then scale up the remaining fit so it stays
-# visually present without overwhelming display geometry.
-_SLIMEY_BUDDY_ONSCREEN_SIZE = 48.0
-
 
 
 # Exactly matches Swift source: buddyX = swiftUIPosition.x + 35; buddyY = +25
@@ -91,7 +56,7 @@ ANNOT_COLORS = {
     "cyan":   QColor(0x4F, 0xD9, 0xFF),
 }
 
-# Progressive stroke animation — shapes draw at "hand speed" (px/sec), so a
+# Progressive stroke animation â€” shapes draw at "hand speed" (px/sec), so a
 # long line takes visibly longer than a short tick mark. Queued sequentially;
 # the buddy cursor rides the pen tip while each stroke draws.
 STROKE_SPEED_PX_S   = 420.0
@@ -128,7 +93,7 @@ def _shape_path_pts(shape: dict):
 
 
 def _shape_length(shape: dict) -> float:
-    """Approximate stroke length in logical px — drives draw duration."""
+    """Approximate stroke length in logical px â€” drives draw duration."""
     kind = shape.get("kind")
     if kind == "circle":
         return 2 * math.pi * shape.get("r", 30)
@@ -171,7 +136,7 @@ def _partial_pts(pts, closed, u):
 
 
 def _stroke_tip(shape: dict, u: float):
-    """Current pen-tip position of a shape at progress u — where the buddy
+    """Current pen-tip position of a shape at progress u â€” where the buddy
     hovers while 'drawing'. Returns (x, y) in logical screen coords."""
     kind = shape.get("kind")
     if kind == "circle":
@@ -213,15 +178,6 @@ class CursorOverlay(QWidget):
 
         # Spring follow state
         self._display_pos = QPointF(0, 0)
-
-        # [SLIMEY] lazy-loaded buddy texture, alive for the whole life of the overlay.
-        # Draws once in __init__; never inside paintEvent or _draw_triangle.
-        self._slimy_pixmap: QPixmap = QPixmap()
-        self._slimy_pixmap_valid = False
-        self._slimy_load_error: Optional[str] = None
-
-        # [SLIMEY] target size (screen px) for the on-screen character.
-        self._slimey_size: float = _SLIMEY_BUDDY_ONSCREEN_SIZE
         self._vel = QPointF(0, 0)
         self._mode: str = MODE_IDLE
         self._audio_level: float = 0.0
@@ -243,19 +199,19 @@ class CursorOverlay(QWidget):
         self._fly_duration: float = 1.8
         self._flight_scale: float = 1.0
         self._dwell_until: float = 0.0
-        # When True, dwell never expires — manager releases after TTS finishes
+        # When True, dwell never expires â€” manager releases after TTS finishes
         self._hold_dwell: bool = False
 
-        # Slow mode — doubles flight + dwell so Clicky feels more like a teacher
+        # Slow mode â€” doubles flight + dwell so Clicky feels more like a teacher
         self._slow_mode: bool = False
 
         # Optional highlight ring around detected element (x, y, radius)
         self._ring: Optional[tuple] = None
         self._ring_phase: float = 0.0
 
-        # Teaching annotations — list of shape dicts the overlay paints each
+        # Teaching annotations â€” list of shape dicts the overlay paints each
         # tick. Shapes animate in sequentially (progressive strokes) and
-        # persist until clear_annotations() — a lesson stays on screen while
+        # persist until clear_annotations() â€” a lesson stays on screen while
         # the student studies it.
         self._annotations: list[dict] = []
         self._draw_queue_end: float = 0.0   # when the last queued stroke finishes
@@ -263,9 +219,6 @@ class CursorOverlay(QWidget):
 
         # Thinking spinner phase
         self._spin_phase: float = 0.0
-
-        # [SLIMEY] try loading the SLIMEY character once at startup.
-        self._load_slimy_buddy()
 
         # Transparent click-through, covers all monitors
         self.setWindowFlags(
@@ -293,7 +246,7 @@ class CursorOverlay(QWidget):
         self._lock_timer.setSingleShot(True)
         self._lock_timer.timeout.connect(self._release_lock)
 
-    # ── Public API ────────────────────────────────────────────────────────────
+    # â”€â”€ Public API â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def set_mode(self, mode: str):
         self._mode = mode
@@ -309,7 +262,7 @@ class CursorOverlay(QWidget):
 
         (x, y) is the EXACT pixel of the UI element in logical screen space
         (same space Qt's QCursor.pos() uses). The buddy lands with the tip of
-        its triangle on that pixel — the highlight ring marks the exact spot."""
+        its triangle on that pixel â€” the highlight ring marks the exact spot."""
         # Buddy's tip should sit on the target pixel. The triangle is drawn
         # centred on _display_pos, so we just plant _display_pos there.
         self._locked_pos = QPointF(x, y)
@@ -328,23 +281,23 @@ class CursorOverlay(QWidget):
 
     def set_point_hold(self, hold: bool):
         """Called by manager when TTS starts (True) / ends (False).
-        While held, dwell never auto-expires — the buddy stays on the element
+        While held, dwell never auto-expires â€” the buddy stays on the element
         the entire time Clicky speaks."""
         self._hold_dwell = hold
         if hold and self._flight_phase == _PHASE_DWELLING:
             self._dwell_until = float("inf")
 
     def release_point(self):
-        """Manager signals that TTS is done — fly buddy back to cursor now.
-        Teaching drawings are NOT cleared here — they persist so the student
+        """Manager signals that TTS is done â€” fly buddy back to cursor now.
+        Teaching drawings are NOT cleared here â€” they persist so the student
         can keep studying them; the manager clears them on the next query."""
         self._hold_dwell = False
         if self._flight_phase == _PHASE_DWELLING:
-            self._dwell_until = 0.0   # expires this tick → triggers return
+            self._dwell_until = 0.0   # expires this tick â†’ triggers return
         # Fade ring on next paint
         self._ring = None
 
-    # ── Teaching annotations ─────────────────────────────────────────────────
+    # â”€â”€ Teaching annotations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def add_shape(self, shape: dict):
         """Queue a shape for progressive drawing. Logical screen coords.
@@ -361,7 +314,7 @@ class CursorOverlay(QWidget):
         now = time.monotonic()
         start = max(now, self._draw_queue_end)
         shape = dict(shape)
-        # Draw at hand speed — long strokes take visibly longer
+        # Draw at hand speed â€” long strokes take visibly longer
         dur = _shape_length(shape) / STROKE_SPEED_PX_S
         dur = max(SHAPE_DRAW_MIN_S, min(SHAPE_DRAW_MAX_S, dur))
         shape["start"] = start
@@ -428,7 +381,7 @@ class CursorOverlay(QWidget):
         self._release_lock()
         self.set_mode(MODE_IDLE)
 
-    # ── Internal ──────────────────────────────────────────────────────────────
+    # â”€â”€ Internal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def _cover_all_monitors(self):
         geo = QApplication.primaryScreen().virtualGeometry()
@@ -455,11 +408,11 @@ class CursorOverlay(QWidget):
         qp = QCursor.pos()
         real = QPointF(qp.x(), qp.y())
 
-        # ── Pointing phase machine ──
+        # â”€â”€ Pointing phase machine â”€â”€
         if self._flight_phase in (_PHASE_FLYING, _PHASE_RETURNING):
             elapsed = time.monotonic() - self._fly_t0
             lp = min(1.0, elapsed / max(0.001, self._fly_duration))
-            # Smoothstep easing — gentle start and end, teacher-friendly
+            # Smoothstep easing â€” gentle start and end, teacher-friendly
             t = lp * lp * (3.0 - 2.0 * lp)
             omt = 1.0 - t
             bx = omt * omt * self._fly_start_pos.x() \
@@ -514,17 +467,17 @@ class CursorOverlay(QWidget):
             self.update()
             return
 
-        # ── Drawing mode: buddy rides the pen tip of the active stroke, and
+        # â”€â”€ Drawing mode: buddy rides the pen tip of the active stroke, and
         # holds at the last tip between strokes while the lesson is still
-        # playing (no yo-yo back to the mouse cursor mid-lesson) ──
+        # playing (no yo-yo back to the mouse cursor mid-lesson) â”€â”€
         tip = self._active_stroke_tip()
         if tip is not None:
             self._last_tip = tip
         elif time.monotonic() >= self._draw_queue_end + 2.5:
-            self._last_tip = None   # lesson over — resume cursor follow
+            self._last_tip = None   # lesson over â€” resume cursor follow
         hold = tip or self._last_tip
         if hold is not None:
-            # Strong pull toward the pen tip — smooth but keeps up with it
+            # Strong pull toward the pen tip â€” smooth but keeps up with it
             tx, ty = hold[0] + 6, hold[1] + 6
             self._display_pos = QPointF(
                 self._display_pos.x() + (tx - self._display_pos.x()) * 0.45,
@@ -535,7 +488,7 @@ class CursorOverlay(QWidget):
             self.update()
             return
 
-        # ── Normal cursor-follow spring ──
+        # â”€â”€ Normal cursor-follow spring â”€â”€
         target = QPointF(real.x() + OFFSET_X, real.y() + OFFSET_Y)
         stiffness, damping = 0.28, 0.62
 
@@ -555,115 +508,7 @@ class CursorOverlay(QWidget):
 
         self.update()
 
-    # ── SLIMEY rendering ────────────────────────────────────────────────────
-
-    def _load_slimy_buddy(self) -> None:
-        """Load the SLIMEY character once at startup. Never failed; never
-        crash. If it can't load, fall back to the original dynamic rendering."""
-        try:
-            src = _slimy_asset_path()
-            if not src.exists():
-                self._slimy_load_error = f"SLIMEY asset not found: {src}"
-                return
-            pix = QPixmap(str(src))
-            if pix.isNull():
-                self._slimy_load_error = f"SLIMEY asset could not be decoded: {src}"
-                return
-            # Constrain to a sane upper bound so a huge PNG can't overflow
-            # the overlay geometry at native resolution.
-            max_dim = 512
-            p = pix.scaled(
-                pix.width(), pix.height(),
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            p = p.scaled(
-                max_dim, max_dim,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            self._slimy_pixmap = p
-            self._slimy_pixmap_valid = True
-            self._slimey_size = min(
-                _SLIMEY_BUDDY_ONSCREEN_SIZE,
-                max(16.0, min(p.width(), p.height())),
-            )
-        except Exception as exc:  # pragma: no cover - defensive
-            self._slimy_load_error = f"SLIMEY asset load failed: {exc}"
-
-    def _draw_slimy_buddy(self, p, cx, cy, scale: float) -> None:
-        """Draw the SLIMEY image centred on (cx, cy). The pixel-art character
-        is drawn as-is (no QPainter recreation, no stylisation).
-
-        cx, cy are already the overlay's local coordinates, so we draw
-        relative to self.x()/self.y() during the call below.
-        """
-        if not self._slimy_pixmap_valid or self._slimy_pixmap.isNull():
-            return
-        pm = self._slimy_pixmap
-        tw = pm.width()
-        th = pm.height()
-        if tw == 0 or th == 0:
-            return
-
-        # Keep the character centred on the existing (cx, cy) anchor while
-        # using the scaled size requested by the caller.
-        dst_w = scale
-        dst_h = int(round(dst_w * th / tw))
-        if dst_w <= 0 or dst_h <= 0:
-            return
-
-        p.save()
-        p.translate(cx, cy)
-
-        # A soft lime halo behind the character — only for the buddy/active
-        # visual, never a global recolour.
-        halo = QColor(0x3C, 0xBB, 0x2B)
-        halo.setAlpha(45)
-        p.setBrush(QBrush(halo))
-        p.setPen(Qt.PenStyle.NoPen)
-        p.drawEllipse(QPointF(0, 0), dst_w * 1.5, dst_h * 1.5)
-
-        p.scale(dst_w / tw, dst_h / th)
-        # QPainter draws the full texture; clip to the scaled square so the
-        # character cannot paint outside its intended footprint.
-        p.setClipRect(-dst_w / 2, -dst_h / 2, dst_w, dst_h)
-        p.drawPixmap(-tw / 2, -th / 2, tw, th, pm)
-
-        p.restore()
-
-    def _draw_tri_buddy(self, p, cx, cy):
-        """Draw the original Clicky triangle. Used only when the SLIMEY asset
-        fails to load (the guaranteed safe fallback)."""
-        size = TRI_SIZE
-        height = size * math.sqrt(3) / 2
-
-        path = QPainterPath()
-        path.moveTo(0, -height / 1.5)
-        path.lineTo(-size / 2, height / 3)
-        path.lineTo(size / 2, height / 3)
-        path.closeSubpath()
-
-        p.save()
-        p.translate(cx, cy)
-
-        # Glow — drawn unrotated so it's a round halo.
-        glow = QColor(CURSOR_BLUE)
-        for i, (r_mul, alpha) in enumerate(((2.2, 35), (1.6, 55), (1.15, 85))):
-            glow.setAlpha(alpha)
-            p.setBrush(QBrush(glow))
-            p.setPen(Qt.PenStyle.NoPen)
-            p.drawEllipse(QPointF(0, 0), size * r_mul * 0.5, size * r_mul * 0.5)
-
-        p.rotate(self._rotation_deg)
-        p.scale(self._flight_scale, self._flight_scale)
-        p.setBrush(QBrush(CURSOR_BLUE))
-        p.setPen(Qt.PenStyle.NoPen)
-        p.drawPath(path)
-
-        p.restore()
-
-# ── Painting ──────────────────────────────────────────────────────────────
+    # â”€â”€ Painting â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     def paintEvent(self, event):
         p = QPainter(self)
@@ -675,7 +520,7 @@ class CursorOverlay(QWidget):
         ):
             self._draw_ring(p)
 
-        # Whiteboard annotations — drawn under the buddy too
+        # Whiteboard annotations â€” drawn under the buddy too
         if self._annotations:
             self._draw_annotations(p)
 
@@ -688,10 +533,7 @@ class CursorOverlay(QWidget):
             self._draw_spinner(p, cx, cy)
         else:
             # idle, speaking, pointing
-            if self._slimy_pixmap_valid and not self._slimy_pixmap.isNull():
-                self._draw_slimy_buddy(p, cx, cy, self._slimey_size)
-            else:
-                self._draw_tri_buddy(p, cx, cy)
+            self._draw_triangle(p, cx, cy)
 
         if self._locked_pos is not None and self._bubble_text:
             self._draw_bubble(p, cx, cy, self._bubble_text)
@@ -701,7 +543,7 @@ class CursorOverlay(QWidget):
     def _draw_annotations(self, p):
         """Render teaching shapes with progressive draw-in animation.
 
-        Each shape animates from 0→100% over SHAPE_DRAW_SECONDS starting at
+        Each shape animates from 0â†’100% over SHAPE_DRAW_SECONDS starting at
         its queued "start" time. Shapes with ttl=None persist at full alpha;
         shapes with a ttl fade out over their last 25%.
         """
@@ -719,7 +561,7 @@ class CursorOverlay(QWidget):
             if ttl is not None:
                 age = now - ann["start"]
                 if age > ttl:
-                    continue         # expired — drop
+                    continue         # expired â€” drop
                 if age > ttl * 0.75:
                     alpha = max(0.0, 1.0 - (age - ttl * 0.75) / (ttl * 0.25))
             keep.append(ann)
@@ -751,7 +593,7 @@ class CursorOverlay(QWidget):
         self._annotations = keep
 
     def _pens(self, col, width=4.0):
-        """(under, main) pen pair — dark under-stroke keeps lines readable
+        """(under, main) pen pair â€” dark under-stroke keeps lines readable
         over light content, like a marker outline."""
         under_col = QColor(0, 0, 0)
         under_col.setAlpha(min(110, col.alpha()))
@@ -811,7 +653,7 @@ class CursorOverlay(QWidget):
             self._outlined_text(p, tx, ty, label, col, alpha)
 
     def _paint_angle(self, p, ann, u, col):
-        """Right-angle marker: a small square corner at (x,y), rotated rot°."""
+        """Right-angle marker: a small square corner at (x,y), rotated rotÂ°."""
         x, y = ann["x"], ann["y"]
         s = ann.get("s", 22)
         rot = math.radians(ann.get("rot", 0))
@@ -876,40 +718,49 @@ class CursorOverlay(QWidget):
             p.drawEllipse(QPointF(cx, cy), radius * r_mul, radius * r_mul)
 
     def _draw_triangle(self, p, cx, cy):
-        """Flat blue equilateral triangle. Retained as the fallback only; in
-        normal operation this branch is not reached."""
-        if self._slimy_pixmap_valid and not self._slimy_pixmap.isNull():
-            return
-
+        """Draw Slimey logo with the existing cursor animation and lime-green glow."""
         size = TRI_SIZE
-        height = size * math.sqrt(3) / 2
-
-        # Build triangle in local coords, then rotate/translate
-        path = QPainterPath()
-        path.moveTo(0, -height / 1.5)              # top vertex
-        path.lineTo(-size / 2, height / 3)         # bottom-left
-        path.lineTo( size / 2, height / 3)         # bottom-right
-        path.closeSubpath()
+        logo_size = int(size * 3.5)
 
         p.save()
         p.translate(cx, cy)
 
-        # Glow — drawn unrotated so it's a round halo
-        glow = QColor(CURSOR_BLUE)
-        for i, (r_mul, alpha) in enumerate(((2.2, 35), (1.6, 55), (1.15, 85))):
+        # Glow — drawn unrotated so it's a round lime-green halo
+        glow = QColor("#7CFF00")
+        for i, (r_mul, alpha) in enumerate(((1.9, 40), (1.5, 45), (1.15, 70))):
             glow.setAlpha(alpha)
             p.setBrush(QBrush(glow))
             p.setPen(Qt.PenStyle.NoPen)
-            p.drawEllipse(QPointF(0, 0), size * r_mul * 0.5, size * r_mul * 0.5)
+            p.drawEllipse(
+                QPointF(0, 0),
+                size * r_mul * 0.5,
+                size * r_mul * 0.5
+            )
 
-        p.rotate(self._rotation_deg)
-        p.scale(self._flight_scale, self._flight_scale)
-        p.setBrush(QBrush(CURSOR_BLUE))
-        p.setPen(Qt.PenStyle.NoPen)
-        p.drawPath(path)
+        # Slimey logo
+        logo_path = Path(__file__).resolve().parent.parent / "assets" / "slimey.png"
+        pixmap = QPixmap(str(logo_path))
+
+        if not pixmap.isNull():
+            p.rotate(self._rotation_deg)
+            p.scale(self._flight_scale, self._flight_scale)
+
+            logo_size = int(size * 3.5)
+
+            scaled = pixmap.scaled(
+                logo_size,
+                logo_size,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+
+            p.drawPixmap(
+                int(-scaled.width() / 2),
+                int(-scaled.height() / 2),
+                scaled
+            )
 
         p.restore()
-
     def _draw_waveform(self, p, cx, cy):
         """5 vertical rounded bars reacting to audio (mirrors BlueCursorWaveformView)."""
         bar_count = 5
@@ -939,7 +790,7 @@ class CursorOverlay(QWidget):
             p.drawRoundedRect(QRectF(x, y, bar_w, h), 1.2, 1.2)
 
     def _draw_spinner(self, p, cx, cy):
-        """Rotating arc — mirrors BlueCursorSpinnerView (trim 0.15 → 0.85)."""
+        """Rotating arc â€” mirrors BlueCursorSpinnerView (trim 0.15 â†’ 0.85)."""
         diameter = 14.0
         rect = QRectF(cx - diameter / 2, cy - diameter / 2, diameter, diameter)
 
@@ -956,7 +807,7 @@ class CursorOverlay(QWidget):
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
 
-        # 70% of the circle (0.15→0.85), rotating
+        # 70% of the circle (0.15â†’0.85), rotating
         start_deg = -self._spin_phase * 180 / math.pi * 2
         span_deg = 252   # 0.7 * 360
         p.drawArc(rect, int(start_deg * 16) % (360 * 16), int(span_deg * 16))
@@ -1003,3 +854,4 @@ class CursorOverlay(QWidget):
         p.drawText(QRectF(box_x, box_y, tw, th), Qt.AlignmentFlag.AlignCenter, label)
 
         p.restore()
+
