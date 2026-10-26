@@ -20,7 +20,6 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 # ── Modules that are lazy-imported by CompanionManager — PyInstaller's
 #    static analysis misses them, so we list them explicitly.
 hidden = [
-    # Lazy LLM providers
     "ai.claude_provider",
     "ai.openai_provider",
     "ai.gemini_provider",
@@ -34,27 +33,11 @@ hidden = [
     "ai.lmstudio_provider",
     "ai.hybrid_pointer",
     "ai.figure_detector",
-
-    # First-run setup wizard + the API key screen it opens (both imported
-    # lazily inside functions, so they need to be named explicitly)
-    "ui.setup_wizard",
-    "ui.api_keys_dialog",
-
-    # Lazy STT providers
-    "audio.stt.deepgram_stt",
-    "audio.stt.openai_stt",
-    "audio.stt.faster_whisper_stt",
-    "audio.stt.whisper_cpp_stt",
-
-    # Lazy TTS providers
-    "audio.tts.edge_tts_provider",
-    "audio.tts.openai_tts_provider",
-    "audio.tts.elevenlabs_provider",
-
-    # Indirect deps
-    "tiktoken_ext",
-    "tiktoken_ext.openai_public",
 ]
+
+# First-run setup wizard + the API key screen it opens (both imported
+# lazily inside functions, so they need to be named explicitly)
+# (already included in hidden list above)
 
 # ── Heavy packages that ship non-Python assets (DLLs, JSON, voices).
 #    collect_all grabs submodules + data files + binaries + metadata.
@@ -95,9 +78,40 @@ for pkg in (
     except Exception:
         pass  # package not installed — that path is optional anyway
 
+# Slimey sprite animation assets (replaces triangle cursor graphic)
+_ANIMATION_SVG_FILES = [
+    ("assets/slimey_idle_01.svg", "assets/slimey_idle_01.svg"),
+    ("assets/slimey_idle_02.svg", "assets/slimey_idle_02.svg"),
+    ("assets/slimey_idle_03.svg", "assets/slimey_idle_03.svg"),
+    ("assets/slimey_idle_04.svg", "assets/slimey_idle_04.svg"),
+    ("assets/slimey_blink_01.svg", "assets/slimey_blink_01.svg"),
+    ("assets/slimey_blink_02.svg", "assets/slimey_blink_02.svg"),
+    ("assets/slimey_blink_03.svg", "assets/slimey_blink_03.svg"),
+    ("assets/slimey_listen_01.svg", "assets/slimey_listen_01.svg"),
+    ("assets/slimey_think_01.svg", "assets/slimey_think_01.svg"),
+    ("assets/slimey_think_02.svg", "assets/slimey_think_02.svg"),
+    ("assets/slimey_think_03.svg", "assets/slimey_think_03.svg"),
+    ("assets/slimey_think_04.svg", "assets/slimey_think_04.svg"),
+    ("assets/slimey_speak_01.svg", "assets/slimey_speak_01.svg"),
+    ("assets/slimey_speak_02.svg", "assets/slimey_speak_02.svg"),
+    ("assets/slimey_speak_03.svg", "assets/slimey_speak_03.svg"),
+    ("assets/slimey_happy_01.svg", "assets/slimey_happy_01.svg"),
+    ("assets/slimey_happy_02.svg", "assets/slimey_happy_02.svg"),
+    ("assets/slimey_happy_03.svg", "assets/slimey_happy_03.svg"),
+    ("assets/slimey_happy_04.svg", "assets/slimey_happy_04.svg"),
+    ("assets/slimey_happy_05.svg", "assets/slimey_happy_05.svg"),
+    ("assets/slimey_error_01.svg", "assets/slimey_error_01.svg"),
+    ("assets/slimey_error_02.svg", "assets/slimey_error_02.svg"),
+    ("assets/slimey_error_03.svg", "assets/slimey_error_03.svg"),
+    ("assets/slimey_sleep_01.svg", "assets/slimey_sleep_01.svg"),
+    ("assets/slimey_sleep_02.svg", "assets/slimey_sleep_02.svg"),
+    ("assets/slimey_sleep_03.svg", "assets/slimey_sleep_03.svg"),
+    ("assets/slimey_sleep_04.svg", "assets/slimey_sleep_04.svg"),
+]
+datas += tuple(_ANIMATION_SVG_FILES)
+
 hiddenimports += hidden
 hiddenimports += collect_submodules("PyQt6")
-
 
 a = Analysis(
     ["main.py"],

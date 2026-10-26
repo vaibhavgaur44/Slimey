@@ -13,7 +13,7 @@ from ai.ollama_models_registry import (
 )
 from config import cfg
 
-_log = logging.getLogger("clicky.ollama")
+_log = logging.getLogger("slimey.ollama")
 
 
 # Model architectures current Ollama builds can no longer load. Pulling one
@@ -50,7 +50,7 @@ def _explain_ollama_error(status: int, body: str, model: str, had_images: bool) 
     # Sending images to a text-only model: Ollama answers 400 with this text.
     if "does not support multimodal" in low or "multimodal data provided" in low:
         return (
-            "'{m}' is a text-only model, but Clicky sends a screenshot with "
+            "'{m}' is a text-only model, but Slimey sends a screenshot with "
             "every question.\n\n"
             "Choose a vision model under Tray -> Ollama -> Vision model, or "
             "pull one:\n"
@@ -152,11 +152,11 @@ class OllamaProvider(BaseLLMProvider):
     async def _resolve_model(self, chosen: str, has_images: bool) -> str:
         """Make sure the model we send actually exists and can load.
 
-        Clicky's default has changed over time, and `ollama pull` happily
+        Slimey's default has changed over time, and `ollama pull` happily
         installs models that can no longer load (llama3.2-vision). Anyone who
         upgrades with an old default configured — or whose default was never
         pulled — used to hit a hard error on their first question. If the
-        configured model is one Clicky itself recommended (or is known dead),
+        configured model is one Slimey itself recommended (or is known dead),
         use the best working model they already have instead.
 
         A model the user chose deliberately is never swapped out from under them.
@@ -253,7 +253,7 @@ class OllamaProvider(BaseLLMProvider):
         }
 
         # Newer model families (Qwen3.5, Gemma 4, ...) think before answering by
-        # default. Clicky only reads the answer, so the user would sit through
+        # default. Slimey only reads the answer, so the user would sit through
         # all of that reasoning in silence: qwen3.5:4b took over a minute to
         # produce its first word, versus 2.0s with thinking off. Thinking also
         # spends the num_predict budget. Only sent to models that report the

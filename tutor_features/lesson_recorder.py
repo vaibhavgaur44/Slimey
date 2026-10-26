@@ -1,11 +1,12 @@
 """
 Lesson recording.
 
-Captures Clicky lessons as:
-  • MP4 video — primary monitor, 8 fps, Clicky's pointer overlaid
+Captures Slimey lessons as:
+  • MP4 video — primary monitor, 8 fps, Slimey's pointer overlaid
   • Markdown transcript — Q&A + timestamps next to the video
 
-Output:  ~/Documents/Clicky Lessons/<timestamp>/
+Output:  ~/Documents/Slimey Lessons/<timestamp>/
+(older recordings from before the rename stay in ~/Documents/Clicky Lessons)
 
 Backend: imageio-ffmpeg (auto-bundles ffmpeg, no system install needed).
 """
@@ -52,7 +53,7 @@ class LessonRecorder:
             return None
 
         ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self._out_dir = Path.home() / "Documents" / "Clicky Lessons" / ts
+        self._out_dir = Path.home() / "Documents" / "Slimey Lessons" / ts
         self._out_dir.mkdir(parents=True, exist_ok=True)
 
         with mss.mss() as sct:
@@ -66,7 +67,7 @@ class LessonRecorder:
             quality=7,
             macro_block_size=None,
         )
-        self._md_lines = [f"# Clicky Lesson — {ts}", ""]
+        self._md_lines = [f"# Slimey Lesson — {ts}", ""]
         self._t0 = time.monotonic()
         self._stop_evt.clear()
         self.is_recording = True

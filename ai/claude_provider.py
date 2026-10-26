@@ -7,7 +7,7 @@ from ai.base_provider import BaseLLMProvider, Message
 from config import cfg
 
 # "The best combination of speed and intelligence" in Anthropic's lineup, and
-# the newest Sonnet. (Clicky previously defaulted to claude-sonnet-4-6, which
+# the newest Sonnet. (Slimey previously defaulted to claude-sonnet-4-6, which
 # is now a legacy model.)
 DEFAULT_MODEL = "claude-sonnet-5-5"
 

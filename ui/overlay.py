@@ -1,5 +1,5 @@
 """
-Clicky's blue buddy cursor — faithful port of the original macOS overlay.
+Slimey's blue buddy cursor — faithful port of the original macOS overlay.
 
 Matches clicky-main/leanring-buddy/OverlayWindow.swift:
   - Flat solid blue equilateral triangle (#3380FF), 16×16, rotated -35°
@@ -22,6 +22,29 @@ from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF
 from PyQt6.QtGui import (
     QPainter, QColor, QPen, QBrush, QPainterPath, QCursor, QFont,
 )
+from PyQt6.QtSvg import QSvgRenderer
+from PyQt6.QtCore import QFileInfo, QDir, QSize
+from typing import Optional, Dict, Tuple
+import os
+
+# Asset directory — relative to the package, works in both dev and frozen PyInstaller
+_ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets")
+
+# Mapped sprite file names per animation state (numbered 1..N)
+_ANIMATION_FRAMES: Dict[str, list[str]] = {
+    "idle": ["slimey_idle_{:02d}".format(i) for i in range(1, 5)],
+    "blink": ["slimey_blink_{:02d}".format(i) for i in range(1, 4)],
+    "listen": ["slimey_listen_{:02d}".format(i) for i in range(1, 2)],
+    "think": ["slimey_think_{:02d}".format(i) for i in range(1, 5)],
+    "speak": ["slimey_speak_{:02d}".format(i) for i in range(1, 4)],
+    "happy": ["slimey_happy_{:02d}".format(i) for i in range(1, 6)],
+    "error": ["slimey_error_{:02d}".format(i) for i in range(1, 4)],
+    "sleep": ["slimey_sleep_{:02d}".format(i) for i in range(1, 5)],
+}
+
+_renderer_cache: Dict[str, QSvgRenderer] = {}
+_loaded_sprites: Dict[str, Optional[QSvgRenderer]] = {}
+
 
 
 MODE_IDLE      = "idle"
@@ -42,8 +65,13 @@ TRI_ROTATION_DEG = -35.0
 # #3380FF
 CURSOR_BLUE = QColor(0x33, 0x80, 0xFF)
 
+# Slimey idle sprite (replaces triangle in idle/speaking/pointing modes)
+IDLE_SVG_PATH = "assets/slimey_idle_01.svg"
+IDLE_SVG_SCALE = 0.125  # 128px SVG scaled to ~16px equivalent
+
+
 # Teaching-annotation palette. The LLM picks colors by name; default is the
-# Clicky blue. Chosen for contrast on both light and dark content.
+# Slimey blue. Chosen for contrast on both light and dark content.
 ANNOT_COLORS = {
     "blue":   QColor(0x33, 0x80, 0xFF),
     "red":    QColor(0xFF, 0x45, 0x55),
@@ -170,10 +198,72 @@ _PHASE_DWELLING  = "dwelling"
 _PHASE_RETURNING = "returning"
 
 
+class AnimationController:
+
+    def __init__(self):
+        self._frame: int = 0
+        self._frame_timer: float = 0.0
+        self._frame_delay: float = 0.15  # seconds per frame (~60 FPS animation)
+        self._loop: bool = True
+        self._state: str = "idle"
+        self._paused: bool = False
+
+    def set_state(self, state: str, *, loop: bool = True, frame_delay: float = 0.15):
+        """Set the animation state.
+
+        Args:
+            state: one of the keys in _ANIMATION_FRAMES dict
+            loop: whether to loop the animation indefinitely
+            frame_delay: seconds between frame advances (lower = faster)
+        """
+        self._state = state
+        self._loop = loop
+        self._frame_delay = frame_delay
+        self._frame = 0
+        self._frame_timer = 0.0
+
+    def update(self, dt: float):
+        """Advance animation frame by dt seconds.
+
+        Must be called each paint/tick interval when animation is active.
+        """
+        if self._paused or self._state not in _ANIMATION_FRAMES:
+            return
+        frames = _ANIMATION_FRAMES[self._state]
+        self._frame_timer += dt
+        if self._frame_timer >= self._frame_delay:
+            n_frames = len(frames)
+            self._frame = (self._frame + 1) % n_frames if self._loop else min(self._frame + 1, n_frames - 1)
+            self._frame_timer -= self._frame_delay
+
+    def current_frame_name(self) -> str:
+        """Return the file name (without .svg) of the current frame."""
+        frames = _ANIMATION_FRAMES.get(self._state, _ANIMATION_FRAMES["idle"])
+        return frames[self._frame % len(frames)]
+
+    def reset(self):
+        """Reset to first frame of current state."""
+        self._frame = 0
+        self._frame_timer = 0.0
+
+    def pause(self):
+        self._paused = True
+
+    def resume(self):
+        self._paused = False
+
+    def state(self) -> str:
+        return self._state
+
+
 class CursorOverlay(QWidget):
 
     def __init__(self):
         super().__init__()
+
+        # Animation controller for sprite states
+        self._anim = AnimationController()
+        self._anim.set_state("idle", loop=True, frame_delay=0.2)
 
         # Spring follow state
         self._display_pos = QPointF(0, 0)
@@ -201,7 +291,7 @@ class CursorOverlay(QWidget):
         # When True, dwell never expires — manager releases after TTS finishes
         self._hold_dwell: bool = False
 
-        # Slow mode — doubles flight + dwell so Clicky feels more like a teacher
+        # Slow mode — doubles flight + dwell so Slimey feels more like a teacher
         self._slow_mode: bool = False
 
         # Optional highlight ring around detected element (x, y, radius)
@@ -281,7 +371,7 @@ class CursorOverlay(QWidget):
     def set_point_hold(self, hold: bool):
         """Called by manager when TTS starts (True) / ends (False).
         While held, dwell never auto-expires — the buddy stays on the element
-        the entire time Clicky speaks."""
+        the entire time Slimey speaks."""
         self._hold_dwell = hold
         if hold and self._flight_phase == _PHASE_DWELLING:
             self._dwell_until = float("inf")
@@ -344,7 +434,7 @@ class CursorOverlay(QWidget):
 
     def _active_stroke_tip(self):
         """Pen tip of the currently-animating shape, or None. The buddy
-        rides this point so Clicky visibly draws each stroke."""
+        rides this point so Slimey visibly draws each stroke."""
         now = time.monotonic()
         active = None
         for ann in self._annotations:
@@ -505,6 +595,10 @@ class CursorOverlay(QWidget):
         self._spin_phase += 0.14  # ~0.8s per rev @ 60fps matches Swift
         self._ring_phase += 0.08
 
+        # Advance animation frame based on tick interval (~16ms @ 60 FPS)
+        dt = 1.0 / 60.0
+        self._anim.update(dt)
+
         self.update()
 
     # ── Painting ──────────────────────────────────────────────────────────────
@@ -526,18 +620,61 @@ class CursorOverlay(QWidget):
         cx = self._display_pos.x() - self.x()
         cy = self._display_pos.y() - self.y()
 
-        if self._mode == MODE_LISTENING:
+        # Determine which animation state to show based on real application mode
+        # Use the animation controller's current state; fall back to idle if missing
+        anim_state = self._anim.state() if hasattr(self, "_anim") else "idle"
+
+        if anim_state == MODE_LISTENING:
             self._draw_waveform(p, cx, cy)
-        elif self._mode == MODE_THINKING:
+        elif anim_state == MODE_THINKING:
             self._draw_spinner(p, cx, cy)
+        elif anim_state == MODE_SPEAKING:
+            # Use the speaking animation from the controller
+            frame_name = self._anim.current_frame_name()
+            sprite_path = os.path.join(_ASSET_DIR, "{}.svg".format(frame_name))
+            if os.path.exists(sprite_path):
+                self._draw_sprite_from_svg(p, cx, cy, sprite_path)
+            else:
+                # Fall back to the old triangle if SVG missing
+                self._draw_triangle(p, cx, cy)
         else:
-            # idle, speaking, pointing
-            self._draw_triangle(p, cx, cy)
+            # idle, pointing, or any other state — use idle animation
+            frame_name = self._anim.current_frame_name()
+            sprite_path = os.path.join(_ASSET_DIR, "{}.svg".format(frame_name))
+            if os.path.exists(sprite_path):
+                self._draw_sprite_from_svg(p, cx, cy, sprite_path)
+            else:
+                # Fall back to the old triangle if SVG missing
+                self._draw_triangle(p, cx, cy)
 
         if self._locked_pos is not None and self._bubble_text:
             self._draw_bubble(p, cx, cy, self._bubble_text)
 
         p.end()
+
+    def _draw_sprite_from_svg(self, p, cx, cy, sprite_path: str):
+        """Render a named sprite SVG at the cursor position.
+
+        The SVG is 128×128; we render it at ~80×80 logical pixels centered
+        at (cx, cy). Falls back gracefully if the file is missing.
+        """
+        if not os.path.exists(sprite_path):
+            # Fall back to the old triangle if SVG is missing
+            self._draw_triangle(p, cx, cy)
+            return
+        renderer = _renderer_cache.get(sprite_path)
+        if renderer is None:
+            try:
+                renderer = QSvgRenderer(sprite_path)
+                _renderer_cache[sprite_path] = renderer
+            except Exception:
+                self._draw_triangle(p, cx, cy)
+                return
+        # Render at ~80px size, centered on cursor position
+        p.save()
+        p.translate(cx, cy)
+        renderer.render(p, QRectF(-40.0, -40.0, 80.0, 80.0))
+        p.restore()
 
     def _draw_annotations(self, p):
         """Render teaching shapes with progressive draw-in animation.
@@ -706,6 +843,30 @@ class CursorOverlay(QWidget):
         pen = QPen(inner, 2)
         p.setPen(pen)
         p.drawEllipse(QPointF(rx, ry), r, r)
+
+    def _draw_idle_sprite(self, p, cx, cy):
+        """Render the Slimey idle sprite SVG, replacing the old triangle.
+
+        The sprite SVG (128×128) is scaled down to be roughly comparable
+        to the old 16×16 triangle. It is drawn at the buddy's cursor position.
+        """
+        svg_path = IDLE_SVG_PATH
+        if not QFileInfo(svg_path).exists():
+            # Fall back to the old triangle if SVG is missing
+            self._draw_triangle(p, cx, cy)
+            return
+        renderer = QSvgRenderer(svg_path)
+        if renderer is None:
+            self._draw_triangle(p, cx, cy)
+            return
+        # Scale: the SVG is 128×128, old triangle was 16×16 ≈ 0.125 ratio
+        # Use a modest visible size (~32×32 logical pixels)
+        # Scale to 2.5× the original size: 32 × 2.5 = 80 logical pixels
+        sprite_size = 80.0
+        p.save()
+        p.translate(cx, cy)
+        renderer.render(p, QRectF(-sprite_size / 2, -sprite_size / 2, sprite_size, sprite_size))
+        p.restore()
 
     def _draw_glow(self, p, cx, cy, radius, color_alpha=90):
         """Cheap soft shadow approximating Swift's .shadow(radius: 8)."""

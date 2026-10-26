@@ -9,7 +9,8 @@ Auth flow (one-time, ~30 seconds):
     python -m ai.github_copilot_provider login
     → prints a 9-char user code + opens https://github.com/login/device
     → you paste the code, click "Authorize"
-    → token cached to %LOCALAPPDATA%\\Clicky\\github_token.json
+    → token cached to %LOCALAPPDATA%\\Slimey\\github_token.json
+      (legacy %LOCALAPPDATA%\\Clicky\\github_token.json is copied on first use)
 
 Chat flow (every call):
     GitHub token  → exchange for short-lived Copilot token (cached to ~25 min)
@@ -25,7 +26,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 import sys
 import time
@@ -36,7 +36,7 @@ from typing import AsyncIterator, List, Optional
 import httpx
 
 from ai.base_provider import BaseLLMProvider, Message
-
+from config import migrate_legacy_user_file, user_data_dir
 
 VSCODE_CLIENT_ID = "Iv1.b507a08c87ecfe98"   # Public VS Code Copilot client id
 DEVICE_CODE_URL  = "https://github.com/login/device/code"
@@ -61,17 +61,16 @@ USER_AGENT     = "GitHubCopilotChat/0.23.1"
 
 
 def _data_dir() -> Path:
-    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    d = Path(base) / "Clicky"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return user_data_dir()
 
 
 def _token_path() -> Path:
+    migrate_legacy_user_file("github_token.json")
     return _data_dir() / "github_token.json"
 
 
 def _models_cache_path() -> Path:
+    migrate_legacy_user_file("copilot_models.json")
     return _data_dir() / "copilot_models.json"
 
 
@@ -83,7 +82,7 @@ def _login_log_path() -> Path:
 
 def _log_login(line: str) -> None:
     """Append a timestamped line to the login log so we can debug failures
-    after the fact (the user can grab this from %LOCALAPPDATA%\\Clicky\\)."""
+    after the fact (the user can grab this from %LOCALAPPDATA%\\Slimey\\)."""
     try:
         from datetime import datetime
         with open(_login_log_path(), "a", encoding="utf-8") as f:
@@ -432,7 +431,7 @@ async def _verify_models(candidates: list[dict]) -> list[dict]:
 
 
 async def refresh_models_to_cache(verify: bool = True) -> list[dict]:
-    """Fetch live + write to %LOCALAPPDATA%\\Clicky\\copilot_models.json."""
+    """Fetch live + write to %LOCALAPPDATA%\\Slimey\\copilot_models.json."""
     raw = await fetch_models_live()
     flat = [_normalise_model(m) for m in raw if m.get("id")]
     usable = _usable_models(flat)
@@ -541,11 +540,11 @@ def free_model_ids() -> list[str]:
 
 
 def pick_default_free_model() -> str:
-    """Best low-cost model for Clicky — vision-capable and cheapest tier."""
+    """Best low-cost model for Slimey — vision-capable and cheapest tier."""
     models = cached_models()
     if not models:
         return FALLBACK_MODEL
-    # Clicky sends screenshots, so vision beats cost.
+    # Slimey sends screenshots, so vision beats cost.
     vision = [m for m in models if m["vision"]]
     pool = vision or models
     return min(pool, key=lambda m: (_cost_rank(m), m["id"]))["id"]

@@ -3,7 +3,8 @@ Always-on ambient audio listener.
 Handles:
   - Continuous mic stream (single sounddevice input)
   - Energy-based VAD to detect speech segments
-  - Wake-word detection via faster-whisper tiny model (triggers on "clicky" / "hey clicky")
+  - Wake-word detection via faster-whisper tiny model (triggers on "slimey" /
+    "hey slimey"; the legacy "clicky" variants are still accepted)
   - Push-to-talk buffering when hotkey is held
   - Streams RMS level to UI (cursor waveform + panel)
 """
@@ -33,8 +34,17 @@ SILENCE_BLOCKS_END = 20              # ~600ms of silence ends a segment
 MAX_SEGMENT_BLOCKS = 120             # ~3.6s max wake-word segment
 PRE_ROLL_BLOCKS    = 18              # ~540ms of pre-roll for the wake word
 
-# Wake phrases — whisper tiny often mis-transcribes "clicky" so we cover variants
+# Wake phrases — whisper tiny often mis-transcribes the wake word so we cover
+# variants. "slimey" is the assistant's name; the legacy "clicky" set is kept
+# so users who learned the old phrase keep working during the transition.
+# Matching is substring-based on the lowercased transcript, so these lists
+# are purely additive — no phrase removal can break existing activation.
 WAKE_WORDS = (
+    # Slimey (current name)
+    "slimey", "slimy", "slime e", "slim e", "slime he", "climby",
+    "hey slimey", "hey slimy", "hi slimey", "ok slimey", "yo slimey",
+    "hey slime",
+    # Clicky (legacy, still accepted)
     "clicky", "click e", "click he", "click me", "clickie", "clicki",
     "cliki", "klicki", "klicky", "kilicky", "clickey", "clickity",
     "hey clicky", "hi clicky", "hey click", "ok clicky", "yo clicky",
@@ -63,7 +73,7 @@ class AmbientListener:
         self._stream_rate = SAMPLE_RATE   # actual rate the stream opens at
         # ambient=False → the mic stays closed until start_recording(). No
         # wake-word scanning, no continuous Whisper passes, and no microphone
-        # indicator in the system tray while Clicky is idle.
+        # indicator in the system tray while Slimey is idle.
         self._ambient = ambient
 
         self._mode: Mode = Mode.STANDBY
@@ -292,7 +302,7 @@ class AmbientListener:
             condition_on_previous_text=False,
             no_speech_threshold=0.45,
             temperature=0.0,
-            initial_prompt="Clicky is a helpful AI assistant.",
+            initial_prompt="Slimey is a helpful AI assistant.",
         )
         return " ".join(s.text for s in segments)
 

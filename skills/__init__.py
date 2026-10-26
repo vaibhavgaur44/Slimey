@@ -7,7 +7,7 @@ level:
     SKILL = {
         "name":        "Self Mode",
         "trigger":     r"(self ?mode|allow ?clicks|enable ?clicking)",
-        "description": "Lets Clicky click for you instead of pointing.",
+        "description": "Lets Slimey click for you instead of pointing.",
         "handler":     handle_self_mode,   # async fn(manager, transcript) -> str
     }
 
@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import importlib.util
 import re
+import shutil
 import sys
 from pathlib import Path
 from typing import Awaitable, Callable, Optional
@@ -37,16 +38,32 @@ _loaded: list[dict] = []
 
 
 def _user_skills_dir() -> Path:
-    """User-level skills dir at ~/.clicky/skills/ — survives reinstall."""
-    return Path.home() / ".clicky" / "skills"
+    """User-level skills dir at ~/.slimey/skills/ — survives reinstall.
+
+    Migration: any skills the user created under the legacy ~/.clicky/skills/
+    are copied here once. Existing files are never overwritten and the old
+    directory is never deleted, so repeated launches are no-ops.
+    """
+    base = Path.home() / ".slimey" / "skills"
+    base.mkdir(parents=True, exist_ok=True)
+    legacy = Path.home() / ".clicky" / "skills"
+    if legacy.is_dir():
+        for f in legacy.glob("*.py"):
+            dst = base / f.name
+            if not dst.exists():
+                try:
+                    shutil.copy2(f, dst)
+                except OSError:
+                    pass  # best-effort; legacy file stays untouched
+    return base
 
 
 def load_all() -> list[dict]:
-    """Discover + import every skill module in this package and ~/.clicky/skills."""
+    """Discover + import every skill module in this package and ~/.slimey/skills."""
     global _loaded
     _loaded = []
 
-    # Bundled skills (shipped with Clicky)
+    # Bundled skills (shipped with Slimey)
     here = Path(__file__).parent
     for f in here.glob("*.py"):
         if f.name.startswith("_"):
@@ -65,7 +82,7 @@ def load_all() -> list[dict]:
 def _try_import(path: Path) -> None:
     try:
         spec = importlib.util.spec_from_file_location(
-            f"clicky_skill_{path.stem}", str(path)
+            f"slimey_skill_{path.stem}", str(path)
         )
         if not spec or not spec.loader:
             return

@@ -2,10 +2,11 @@
 Example skill — demonstrates the SKILL interface.
 
 Trigger:  "self mode" / "allow clicks" / "click for me"
-Action:   asks Clicky's manager to actually click the next pointed element
+Action:   asks Slimey's manager to actually click the next pointed element
           instead of just hovering on it.
 
-Copy this file to ~/.clicky/skills/ and edit, or write your own.
+Copy this file to ~/.slimey/skills/ and edit, or write your own.
+(The legacy ~/.clicky/skills/ is copied over automatically on startup.)
 """
 
 from __future__ import annotations
@@ -22,6 +23,6 @@ async def handle_self_mode(manager, transcript: str) -> str:
 SKILL = {
     "name":        "Self Mode",
     "trigger":     r"\b(self\s*mode|allow\s*clicks|click\s*for\s*me)\b",
-    "description": "Lets Clicky click the element it points at.",
+    "description": "Lets Slimey click the element it points at.",
     "handler":     handle_self_mode,
 }

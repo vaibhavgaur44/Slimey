@@ -162,8 +162,8 @@ class GlobalHotkeyMonitor:
 class StopHotkey:
     """A global key that cancels the current generation (default: Esc).
 
-    Only fires while Clicky is actively talking/thinking — the callback itself
-    should no-op when Clicky is idle, so this can be left always-on without
+    Only fires while Slimey is actively talking/thinking — the callback itself
+    should no-op when Slimey is idle, so this can be left always-on without
     stealing Esc from other apps' UX.
     """
 

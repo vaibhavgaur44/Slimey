@@ -1,5 +1,5 @@
 """
-Central state machine for Clicky Windows.
+Central state machine for Slimey Windows.
 
 Orchestrates:
   hotkey / wake-word → ambient listener capture → STT → screen capture
@@ -35,7 +35,7 @@ from tutor_features import (
 )
 import skills as skills_pkg
 
-_log = logging.getLogger("clicky.manager")
+_log = logging.getLogger("slimey.manager")
 
 
 def _ensure_ollama_running():
@@ -114,7 +114,7 @@ def _build_system_prompt(
 
     # ── Quiz mode: dominant prompt that completely replaces normal behaviour ──
     if quiz_mode:
-        return f"""You are Clicky, an interactive QUIZ TUTOR. The user has
+        return f"""You are Slimey, an interactive QUIZ TUTOR. The user has
 turned on Quiz Mode and wants to be tested, NOT explained to.
 
 {chr(10).join(ctx_lines)}
@@ -251,7 +251,7 @@ ANY_TAG_RE   = re.compile(
 )
 ANY_PARTIAL_RE = re.compile(r'\[[A-Z]{0,9}(?::[^\]]*)?$')
 
-# Questions that ask Clicky to locate / click UI elements — triggers the
+# Questions that ask Slimey to locate / click UI elements — triggers the
 # Computer Use element locator when Claude is the provider.
 POINT_TRIGGER_RE = re.compile(
     r"\b(where\s+(is|do|can)|how\s+do\s+i\s+(click|find|open|access|use)|"
@@ -356,7 +356,8 @@ class CompanionManager(QObject):
         self._collab: Optional[collab.CollabSession] = None
         self._workflow: Optional[workflow_capture.WorkflowCapture] = None
 
-        # Load user-created skills from skills/ + ~/.clicky/skills/
+        # Load user-created skills from skills/ + ~/.slimey/skills/
+        # (legacy ~/.clicky/skills files are copied over on first load)
         try:
             skills_pkg.load_all()
         except Exception:
@@ -1531,7 +1532,7 @@ class CompanionManager(QObject):
                 self.sig_ollama_selected.emit(name)
 
     def set_custom_instructions(self, text: str):
-        """Tray callback — restrict/steer what Clicky helps with. Persists
+        """Tray callback — restrict/steer what Slimey helps with. Persists
         to .env so it survives a restart, not just this session."""
         cfg.custom_instructions = text.strip()
         try:
@@ -1566,7 +1567,7 @@ class CompanionManager(QObject):
         self._stt = None
 
     def set_response_language(self, code: str):
-        """Tray callback — pin Clicky's reply language ('' = auto-detect)."""
+        """Tray callback — pin Slimey's reply language ('' = auto-detect)."""
         cfg.response_language = code
         try:
             from dotenv import set_key
@@ -1623,7 +1624,8 @@ class CompanionManager(QObject):
         """Tray toggle — switches between always-listening and hotkey-only.
 
         ON keeps the mic open and runs a Whisper pass over everything it hears
-        to catch "Clicky". OFF (the default) leaves the mic closed until you
+        to catch "Slimey" (the legacy "Clicky" variants still work too).
+        OFF (the default) leaves the mic closed until you
         press the hotkey, which is both quieter on CPU and less invasive.
         """
         cfg.set_mic_mode("ambient" if enabled else "hotkey")

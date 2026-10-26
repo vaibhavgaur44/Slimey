@@ -1,5 +1,5 @@
 """
-Curated registry of Ollama models recommended for Clicky, plus heuristics
+Curated registry of Ollama models recommended for Slimey, plus heuristics
 for classifying installed models as vision-capable or text-only.
 
 Why curated:
@@ -31,7 +31,7 @@ class OllamaRec:
 
 # qwen2.5vl:3b — chosen by measurement, and it beat the newer families.
 #
-# Benchmarked on a 4 GB laptop GPU and on CPU only, using Clicky's real prompt:
+# Benchmarked on a 4 GB laptop GPU and on CPU only, using Slimey's real prompt:
 #
 #                   screen reading   web-search     CPU-only      notes
 #                   (easy + hard)    grounding      first word
@@ -134,7 +134,7 @@ RECOMMENDED_TEXT: list[OllamaRec] = [
 
 # ─── Which installed model to use when the configured one isn't usable ────────
 
-# Models Clicky has itself defaulted to or recommended, in any release. A user
+# Models Slimey has itself defaulted to or recommended, in any release. A user
 # who still has one of these configured did not choose it deliberately, so it is
 # safe to swap for something that works; a model they picked themselves is not.
 _SHIPPED_DEFAULTS = {

@@ -1,8 +1,9 @@
 """
 Knowledge Journal + Spaced Repetition.
 
-Every Q&A Clicky has gets logged to a SQLite db at:
-    %LOCALAPPDATA%\\Clicky\\journal.db
+Every Q&A Slimey has gets logged to a SQLite db at:
+    %LOCALAPPDATA%\\Slimey\\journal.db
+(legacy %LOCALAPPDATA%\\Clicky\\journal.db is copied over on first use)
 
 Voice queries that surface this:
     "what did I learn today"            → today's entries
@@ -19,22 +20,20 @@ Spaced repetition uses the SM-2 lite algorithm:
 
 from __future__ import annotations
 
-import os
 import sqlite3
 import time
 from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Optional
+
+from config import migrate_legacy_user_file, user_data_dir
 
 
 _INTERVALS_DAYS = (1, 3, 7, 14, 30, 60, 120)
 
 
 def _db_path() -> Path:
-    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    d = Path(base) / "Clicky"
-    d.mkdir(parents=True, exist_ok=True)
-    return d / "journal.db"
+    """Current journal file. One-off copies the legacy Clicky location."""
+    migrate_legacy_user_file("journal.db")
+    return user_data_dir() / "journal.db"
 
 
 def _connect() -> sqlite3.Connection:

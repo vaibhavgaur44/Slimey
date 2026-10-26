@@ -15,7 +15,7 @@ import httpx
 from ai.base_provider import BaseLLMProvider, Message
 from config import cfg
 
-_log = logging.getLogger("clicky.gemini")
+_log = logging.getLogger("slimey.gemini")
 
 DEFAULT_MODEL = "gemini-3.6-flash"
 STREAM_URL = (
@@ -85,7 +85,7 @@ class GeminiProvider(BaseLLMProvider):
 
     def _headers(self) -> dict:
         # The key travels in a header, never in the URL. httpx quotes the full
-        # URL in its error text, which reaches the tray toast and clicky.log —
+        # URL in its error text, which reaches the tray toast and slimey.log —
         # with the key in the query string, every failed request leaked it.
         return {"x-goog-api-key": self._api_key or "", "Content-Type": "application/json"}
 

@@ -31,7 +31,7 @@ _CU_RESOLUTIONS = (
 
 _API_URL = "https://api.anthropic.com/v1/messages"
 
-_log = logging.getLogger("clicky.locator")
+_log = logging.getLogger("slimey.locator")
 
 # Claude Computer Use is tied to a specific model + tool version. This module
 # pins claude-sonnet-4-6 with computer_20251124; Claude 5.x models require a

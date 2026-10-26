@@ -451,7 +451,13 @@ def main():
         from ui.setup_wizard import maybe_show_setup_wizard, SetupWizard
 
         # Force-show via env var (handy for testing).
-        if os.environ.get("CLICKY_FORCE_SETUP", "").strip() in ("1", "true", "yes"):
+        # SLIMEY_FORCE_SETUP is current; CLICKY_FORCE_SETUP is a deprecated
+        # fallback kept for older setups that pinned the old name.
+        setup_force = (
+            os.environ.get("SLIMEY_FORCE_SETUP")
+            or os.environ.get("CLICKY_FORCE_SETUP", "")
+        ).strip()
+        if setup_force in ("1", "true", "yes"):
             wiz = SetupWizard()
             wiz.show()
             _setup_keepalive[0] = wiz

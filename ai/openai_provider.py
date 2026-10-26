@@ -7,7 +7,7 @@ from openai import AsyncOpenAI
 from ai.base_provider import BaseLLMProvider, Message
 from config import cfg
 
-# The "Sol" tier is OpenAI's balanced one, priced like the GPT-4o Clicky used
+# The "Sol" tier is OpenAI's balanced one, priced like the GPT-4o Slimey used
 # before. Deliberately gpt-6-sol rather than the newer gpt-6.1-sol: measured
 # time-to-first-word over six runs was 1.3s vs 3.1s median, and for a voice
 # assistant that wait is the product. 6.1-sol stays one click away in the picker;

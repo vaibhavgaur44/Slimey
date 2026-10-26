@@ -6,7 +6,8 @@ Each provider exposes a "list models" endpoint we hit on demand:
   • OpenAI:     GET /v1/models                    (key in Authorization)
   • Gemini:     GET /v1beta/models                (key in x-goog-api-key)
 
-Cached per-provider to %LOCALAPPDATA%\\Clicky\\models_<provider>.json.
+Cached per-provider to %LOCALAPPDATA%\\Slimey\\models_<provider>.json.
+(legacy %LOCALAPPDATA%\\Clicky caches are copied over on first use)
 
 Three things this module is careful about, each learned the hard way:
 
@@ -19,7 +20,7 @@ Three things this module is careful about, each learned the hard way:
      deprecated models that 404, Responses-only "pro" models that reject chat
      requests, and image/audio/search models; Gemini returns TTS, image and
      live-audio models under the same generateContent method as chat models.
-     Picking any of those made Clicky fail or go silent, so lists are filtered
+     Picking any of those made Slimey fail or go silent, so lists are filtered
      and, for OpenAI, each survivor is probed once with a tiny request.
 
   3. The cache can outlive the logic that produced it. Entries carry a schema
@@ -42,7 +43,7 @@ from typing import Optional
 
 import httpx
 
-from config import cfg
+from config import cfg, migrate_legacy_user_file, user_data_dir
 
 
 # New releases should show up within a day, not a month.
@@ -82,13 +83,11 @@ _FALLBACKS: dict[str, list[dict]] = {
 
 
 def _data_dir() -> Path:
-    base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
-    d = Path(base) / "Clicky"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return user_data_dir()
 
 
 def _cache_path(provider: str) -> Path:
+    migrate_legacy_user_file(f"models_{provider}.json")
     return _data_dir() / f"models_{provider}.json"
 
 
@@ -103,13 +102,13 @@ _PREFERRED_DEFAULT: dict[str, list[str]] = {
     # Anthropic: Sonnet is "the best combination of speed and intelligence".
     "claude": [r"^claude-sonnet-\d+-\d+$", r"^claude-sonnet-\d+$",
                r"^claude-haiku-", r"^claude-opus-"],
-    # gpt-6-sol: balanced tier, priced like the GPT-4o Clicky used before, and
+    # gpt-6-sol: balanced tier, priced like the GPT-4o Slimey used before, and
     # measured at 1.3s time-to-first-word versus 3.1s for the newer gpt-6.1-sol
     # (see openai_provider.py). Luna is the cheap/fast tier.
     "openai": [r"^gpt-6-sol$", r"^gpt-6-luna$", r"^gpt-6\.\d+-sol$",
                r"^gpt-5\.\d+-mini$", r"^gpt-4\.1$", r"^gpt-4o$"],
     # gemini-3.6-flash, deliberately, not the newest Flash. Measured over four
-    # rounds through Clicky's own provider: 3.6 answered in 3.3s median with no
+    # rounds through Slimey's own provider: 3.6 answered in 3.3s median with no
     # errors; 3.8 took 6.4s and returned HTTP 503 "high demand" on 2 of 4
     # requests (launch-week overload). 3.8 stays one click away in the picker.
     "gemini": [r"^gemini-3\.6-flash$", r"^gemini-\d+\.\d+-flash$",
@@ -192,7 +191,7 @@ def _is_openai_chat_model(mid: str) -> bool:
     if any(marker in mid for marker in _OPENAI_NON_CHAT):
         return False
     # "-pro" models exist only on the Responses API; chat completions rejects
-    # them, so offering one makes Clicky fail on every question.
+    # them, so offering one makes Slimey fail on every question.
     if re.search(r"(^|-)pro($|-)", mid):
         return False
     # Dated snapshots (gpt-5-2025-08-07, gpt-4o-2024-08-06) duplicate the alias.
@@ -461,7 +460,7 @@ def model_ids(provider: str) -> list[str]:
 
 
 def best_default(provider: str) -> Optional[str]:
-    """The model Clicky should start on for this provider (top of the list)."""
+    """The model Slimey should start on for this provider (top of the list)."""
     models = cached_models(provider)
     for m in models:
         if m.get("vision"):

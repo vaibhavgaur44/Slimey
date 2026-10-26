@@ -10,7 +10,7 @@ _model_cache = None
 
 
 def wav_to_whisper_input(wav_bytes: bytes):
-    """Decode Clicky's own 16 kHz mono PCM16 WAV into the float32 array
+    """Decode Slimey's own 16 kHz mono PCM16 WAV into the float32 array
     faster-whisper accepts directly.
 
     Handing faster-whisper a file path makes it decode through PyAV, and

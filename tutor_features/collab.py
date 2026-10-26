@@ -1,5 +1,5 @@
 """
-Live collaboration — share a Clicky session with a friend over WebRTC.
+Live collaboration — share a Slimey session with a friend over WebRTC.
 
 Status: SKELETON. The mechanism is laid out, but a working build needs:
   1. A signalling server (WebSocket relay so peers can find each other)
@@ -17,7 +17,7 @@ How users would use it once finished:
     │ Tray → Live Session → Start    │    │ Tray → Live Session → Join    │
     │ Tray shows code:  BLU-X4F      │    │ Pop-up: "Enter code:"         │
     │ Friend clicks Join              │    │ Types  BLU-X4F                │
-    │ Both Clickys now share:         │    │ Both Clickys now share:       │
+    │ Both Slimeys now share:         │    │ Both Slimeys now share:       │
     │   • LLM responses               │    │   • LLM responses             │
     │   • Pointer coordinates         │    │   • Pointer coordinates       │
     │   • Q&A history                 │    │   • Q&A history               │

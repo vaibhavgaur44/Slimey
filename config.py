@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,6 +21,49 @@ for _name in (".env", ".env.local"):
     _p = _HERE / _name
     if _p.exists():
         load_dotenv(_p, override=True)
+
+
+# ── User data directory, with legacy Clicky-location migration ───────────────
+
+def user_data_dir() -> Path:
+    """Slimey's per-user data dir: %LOCALAPPDATA%\\Slimey (created on demand)."""
+    base = Path(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"))
+    p = base / "Slimey"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def migrate_legacy_user_file(name: str) -> Path:
+    """Idempotent, lossless relocation of one legacy data file.
+
+    Copies %LOCALAPPDATA%\\Clicky\\<name> into %LOCALAPPDATA%\\Slimey\\<name>
+    only if the destination does not exist yet. The old file is never
+    modified or deleted, and an existing newer file always wins — so both
+    directories being present is safe and repeated launches are no-ops.
+    SQLite -wal/-shm sidecars travel with a copied .db so no journal data
+    is orphaned mid-transaction.
+
+    Returns the (existing or newly migrated) destination path.
+    """
+    dst = user_data_dir() / name
+    if dst.exists():
+        return dst
+    base = Path(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"))
+    src = base / "Clicky" / name
+    if src.is_file():
+        try:
+            shutil.copy2(src, dst)
+            for suffix in ("-wal", "-shm"):
+                side = src.with_name(name + suffix)
+                dst_side = dst.with_name(name + suffix)
+                if side.is_file() and not dst_side.exists():
+                    shutil.copy2(side, dst_side)
+        except OSError:
+            # Best-effort: if the copy fails the caller keeps its usual error
+            # path; the legacy file remains untouched and will be retried on
+            # the next launch. user_data_dir() already created the Slimey dir.
+            pass
+    return dst
 
 
 DEFAULT_SYSTEM_PROMPT = """You are Slimey, a VISUAL AI tutor running on Windows. You live
@@ -409,8 +453,9 @@ class Config:
     def get_ollama_model(self, kind: str = "vision") -> str:
         """Return the active model for the given kind ("vision" | "text").
 
-        Reads runtime override from CLICKY_OLLAMA_VISION_MODEL /
-        CLICKY_OLLAMA_TEXT_MODEL first, then the dataclass field, then the
+        Reads runtime override from SLIMEY_OLLAMA_VISION_MODEL /
+        SLIMEY_OLLAMA_TEXT_MODEL first (legacy CLICKY_* names accepted as a
+        deprecated fallback), then the dataclass field, then the
         legacy single-model knob.
         """
         suffix = "VISION_MODEL" if kind == "vision" else "TEXT_MODEL"
