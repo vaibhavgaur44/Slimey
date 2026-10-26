@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# PyInstaller build artefacts
+build/
+dist/
+*.spec.bak
+
+# Generated icon (rebuildable from assets/make_icon.py)
+assets/icon.ico
+
+# Copilot cached token
+github_token.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+.freebuff/
+Slimey_Technical_Audit_Report.md
