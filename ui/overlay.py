@@ -62,8 +62,9 @@ TRI_SIZE = 16
 # Swift: .rotationEffect(.degrees(-35))
 TRI_ROTATION_DEG = -35.0
 
-# #3380FF
-CURSOR_BLUE = QColor(0x33, 0x80, 0xFF)
+# Slimey lime green accent color
+# Matched to the mascot's green coloring
+CURSOR_LIME = QColor(0x32, 0xCD, 0x32)
 
 # Slimey idle sprite (replaces triangle in idle/speaking/pointing modes)
 IDLE_SVG_PATH = "assets/slimey_idle_01.svg"
@@ -671,9 +672,23 @@ class CursorOverlay(QWidget):
         anim_state = self._anim.state() if hasattr(self, "_anim") else "idle"
 
         if anim_state == MODE_LISTENING:
-            self._draw_waveform(p, cx, cy)
+            # Render the listening sprite animation.
+            frame_name = self._anim.current_frame_name()
+            sprite_path = os.path.join(_ASSET_DIR, "{}.svg".format(frame_name))
+            if os.path.exists(sprite_path):
+                self._draw_sprite_from_svg(p, cx, cy, sprite_path)
+            else:
+                # Fall back to a simple pose if SVG missing
+                self._draw_triangle(p, cx, cy)
         elif anim_state == MODE_THINKING:
-            self._draw_spinner(p, cx, cy)
+            # Render the thinking sprite animation.
+            frame_name = self._anim.current_frame_name()
+            sprite_path = os.path.join(_ASSET_DIR, "{}.svg".format(frame_name))
+            if os.path.exists(sprite_path):
+                self._draw_sprite_from_svg(p, cx, cy, sprite_path)
+            else:
+                # Fall back to a simple pose if SVG missing
+                self._draw_triangle(p, cx, cy)
         elif anim_state == MODE_SPEAKING:
             # Use the speaking animation from the controller
             frame_name = self._anim.current_frame_name()
@@ -701,8 +716,8 @@ class CursorOverlay(QWidget):
     def _draw_sprite_from_svg(self, p, cx, cy, sprite_path: str):
         """Render a named sprite SVG at the cursor position.
 
-        The SVG is 128×128; we render it at ~80×80 logical pixels centered
-        at (cx, cy). Falls back gracefully if the file is missing.
+        The SVG is 128×128; we render it at 160×160 logical pixels centered
+        at (cx, cy) for 2× visible size. Falls back gracefully if the file is missing.
         """
         if not os.path.exists(sprite_path):
             # Fall back to the old triangle if SVG is missing
@@ -716,10 +731,10 @@ class CursorOverlay(QWidget):
             except Exception:
                 self._draw_triangle(p, cx, cy)
                 return
-        # Render at ~80px size, centered on cursor position
+        # Render at 2× the original size: 160px for the larger mascot display
         p.save()
         p.translate(cx, cy)
-        renderer.render(p, QRectF(-40.0, -40.0, 80.0, 80.0))
+        renderer.render(p, QRectF(-80.0, -80.0, 160.0, 160.0))
         p.restore()
 
     def _draw_annotations(self, p):
@@ -748,7 +763,7 @@ class CursorOverlay(QWidget):
                     alpha = max(0.0, 1.0 - (age - ttl * 0.75) / (ttl * 0.25))
             keep.append(ann)
 
-            col = QColor(ANNOT_COLORS.get(ann.get("color", "blue"), CURSOR_BLUE))
+            col = QColor(ANNOT_COLORS.get(ann.get("color", "blue"), CURSOR_LIME))
             col.setAlpha(int(235 * alpha))
             kind = ann["kind"]
             try:
@@ -877,14 +892,14 @@ class CursorOverlay(QWidget):
         pulse = (math.sin(self._ring_phase) + 1) / 2   # 0..1
         r = base_r + pulse * 6
         # Outer halo
-        glow = QColor(CURSOR_BLUE)
+        glow = QColor(CURSOR_LIME)
         glow.setAlpha(60)
         pen = QPen(glow, 4)
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawEllipse(QPointF(rx, ry), r + 3, r + 3)
         # Crisp inner ring
-        inner = QColor(CURSOR_BLUE)
+        inner = QColor(CURSOR_LIME)
         inner.setAlpha(190)
         pen = QPen(inner, 2)
         p.setPen(pen)
@@ -916,7 +931,7 @@ class CursorOverlay(QWidget):
 
     def _draw_glow(self, p, cx, cy, radius, color_alpha=90):
         """Cheap soft shadow approximating Swift's .shadow(radius: 8)."""
-        g = QColor(CURSOR_BLUE)
+        g = QColor(CURSOR_LIME)
         for i, r_mul in enumerate((1.6, 1.25, 1.0)):
             g.setAlpha(color_alpha // (i + 1))
             p.setBrush(QBrush(g))
@@ -939,7 +954,7 @@ class CursorOverlay(QWidget):
         p.translate(cx, cy)
 
         # Glow — drawn unrotated so it's a round halo
-        glow = QColor(CURSOR_BLUE)
+        glow = QColor(CURSOR_LIME)
         for i, (r_mul, alpha) in enumerate(((2.2, 35), (1.6, 55), (1.15, 85))):
             glow.setAlpha(alpha)
             p.setBrush(QBrush(glow))
@@ -948,7 +963,7 @@ class CursorOverlay(QWidget):
 
         p.rotate(self._rotation_deg)
         p.scale(self._flight_scale, self._flight_scale)
-        p.setBrush(QBrush(CURSOR_BLUE))
+        p.setBrush(QBrush(CURSOR_LIME))
         p.setPen(Qt.PenStyle.NoPen)
         p.drawPath(path)
 
@@ -963,14 +978,14 @@ class CursorOverlay(QWidget):
         total_w = bar_count * bar_w + (bar_count - 1) * spacing
 
         # Glow behind bars
-        glow = QColor(CURSOR_BLUE)
+        glow = QColor(CURSOR_LIME)
         for r_mul, a in ((2.0, 40), (1.3, 70)):
             glow.setAlpha(a)
             p.setBrush(QBrush(glow))
             p.setPen(Qt.PenStyle.NoPen)
             p.drawEllipse(QPointF(cx, cy), 10 * r_mul, 10 * r_mul)
 
-        p.setBrush(QBrush(CURSOR_BLUE))
+        p.setBrush(QBrush(CURSOR_LIME))
         p.setPen(Qt.PenStyle.NoPen)
 
         for i in range(bar_count):
@@ -988,14 +1003,14 @@ class CursorOverlay(QWidget):
         rect = QRectF(cx - diameter / 2, cy - diameter / 2, diameter, diameter)
 
         # Glow
-        glow = QColor(CURSOR_BLUE)
+        glow = QColor(CURSOR_LIME)
         for r_mul, a in ((2.0, 40), (1.3, 70)):
             glow.setAlpha(a)
             p.setBrush(QBrush(glow))
             p.setPen(Qt.PenStyle.NoPen)
             p.drawEllipse(QPointF(cx, cy), diameter * r_mul * 0.5, diameter * r_mul * 0.5)
 
-        pen = QPen(CURSOR_BLUE, 2.5)
+        pen = QPen(CURSOR_LIME, 2.5)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
@@ -1027,9 +1042,9 @@ class CursorOverlay(QWidget):
         p.translate(-box_x, -(box_y + th / 2))
 
         a = int(255 * self._bubble_alpha)
-        bg = QColor(CURSOR_BLUE)
+        bg = QColor(CURSOR_LIME)
         bg.setAlpha(a)
-        glow = QColor(CURSOR_BLUE)
+        glow = QColor(CURSOR_LIME)
         glow.setAlpha(int(90 * self._bubble_alpha))
 
         # Glow
