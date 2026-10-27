@@ -58,7 +58,7 @@ OFFSET_X = 35
 OFFSET_Y = 25
 
 # Triangle bounding box edge (Swift: frame(width: 16, height: 16))
-TRI_SIZE = 16
+TRI_SIZE = 12  # 75% of original 16px triangle
 # Swift: .rotationEffect(.degrees(-35))
 TRI_ROTATION_DEG = -35.0
 
@@ -356,15 +356,19 @@ class CursorOverlay(QWidget):
         taskbar_gap = max(40.0, cm_to_px * 1.8)  # ~2 cm gap
 
         # Position: right edge with small margin, bottom just above taskbar
-        margin_right = 80.0 * dpi_scale  # keep fully visible
+        margin_right = 60.0 * dpi_scale  # 75% of original 80px, keep fully visible
         home_x = screen_geo.right() - margin_right
         home_y = work_geo.bottom() + taskbar_gap  # below work area = above taskbar
 
         # Clamp to screen bounds in case of unusual configurations
-        home_x = max(screen_geo.left() + 80, min(home_x, screen_geo.right() - 80))
-        home_y = max(screen_geo.top() + 80, min(home_y, screen_geo.bottom() - 80))
+        home_x = max(screen_geo.left() + 60, min(home_x, screen_geo.right() - 60))
+        home_y = max(screen_geo.top() + 60, min(home_y, screen_geo.bottom() - 60))
 
         self._display_pos = QPointF(home_x, home_y)
+
+        # Fixed home position — authoritative, independent of mouse coords.
+        # Computed once at init and never recalculated from cursor position.
+        self._home_pos = QPointF(home_x, home_y)
 
         # 60 FPS
         self._tick_timer = QTimer(self)
@@ -536,6 +540,9 @@ class CursorOverlay(QWidget):
         self._rotation_deg = TRI_ROTATION_DEG
         self._hold_dwell = False
         self._ring = None
+        # Return to the authoritative home position (not mouse cursor)
+        self._display_pos = self._home_pos
+        self._vel = QPointF(0, 0)
 
     def _tick(self):
         qp = QCursor.pos()
@@ -626,7 +633,8 @@ class CursorOverlay(QWidget):
         # The home position was computed in __init__ using screen geometry.
         # During target guidance, _flight_phase takes over and moves Slimey
         # from home to the target and back.
-        home_target = self._display_pos  # stay where we are
+        # Use the authoritative home position, NOT mouse coordinates.
+        home_target = self._home_pos  # fixed home, independent of cursor
 
         # If not currently flying or dwelling, gently return to home if drifted
         if self._flight_phase in (_PHASE_FOLLOW,) and self._vel.manhattanLength() > 1.0:
@@ -731,10 +739,10 @@ class CursorOverlay(QWidget):
             except Exception:
                 self._draw_triangle(p, cx, cy)
                 return
-        # Render at 2× the original size: 160px for the larger mascot display
+        # Render at 75% of original size: 120px for the smaller mascot display
         p.save()
         p.translate(cx, cy)
-        renderer.render(p, QRectF(-80.0, -80.0, 160.0, 160.0))
+        renderer.render(p, QRectF(-60.0, -60.0, 120.0, 120.0))
         p.restore()
 
     def _draw_annotations(self, p):
@@ -922,8 +930,8 @@ class CursorOverlay(QWidget):
             return
         # Scale: the SVG is 128×128, old triangle was 16×16 ≈ 0.125 ratio
         # Use a modest visible size (~32×32 logical pixels)
-        # Scale to 2× the current displayed size: 80 × 2 = 160 logical pixels
-        sprite_size = 160.0
+        # Scale to 2× the current displayed size: 60 × 2 = 120 logical pixels (75%)
+        sprite_size = 120.0
         p.save()
         p.translate(cx, cy)
         renderer.render(p, QRectF(-sprite_size / 2, -sprite_size / 2, sprite_size, sprite_size))
