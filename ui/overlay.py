@@ -358,7 +358,12 @@ class CursorOverlay(QWidget):
         # Position: right edge with small margin, bottom just above taskbar
         margin_right = 60.0 * dpi_scale  # 75% of original 80px, keep fully visible
         home_x = screen_geo.right() - margin_right
-        home_y = work_geo.bottom() + taskbar_gap  # below work area = above taskbar
+        # Raise home position so the entire mascot is visible just above the taskbar.
+        # work_geo.bottom() is the y-coordinate just above the taskbar.
+        # Subtract mascot height (120px at 75% reduction) and a 15px gap.
+        mascot_height = 120.0
+        home_gap = 15.0  # pixels between mascot bottom and taskbar top
+        home_y = work_geo.bottom() - mascot_height - home_gap  # above taskbar with gap
 
         # Clamp to screen bounds in case of unusual configurations
         home_x = max(screen_geo.left() + 60, min(home_x, screen_geo.right() - 60))
@@ -596,8 +601,32 @@ class CursorOverlay(QWidget):
             self._flight_scale = breathe
             self._bubble_alpha = min(1.0, self._bubble_alpha + 0.05)
             self._bubble_scale = self._bubble_scale + (1.0 - self._bubble_scale) * 0.15
-            # Stay planted on the element
-            self._display_pos = QPointF(self._locked_pos.x(), self._locked_pos.y())
+            # Stay planted on the element, but offset beside the target ring
+            # so the mascot doesn't obscure the target or "Right here" label.
+            # Offset diagonally down-right: mascot half-width + ring radius + margin
+            mascot_half = 60.0  # 120px diameter / 2 (75% reduced size)
+            ring_radius = 26.0
+            offset_x = mascot_half + ring_radius + 10.0  # right of ring
+            offset_y = mascot_half + ring_radius + 10.0  # below ring
+            offset = QPointF(offset_x, offset_y)
+            # Apply offset relative to locked target position
+            self._display_pos = QPointF(self._locked_pos.x() + offset.x(),
+                                        self._locked_pos.y() + offset.y())
+            # Keep Slimey on-screen: if offset pushes off right/bottom edge,
+            # reverse to top-left offset instead
+            screen = QApplication.primaryScreen().availableGeometry()
+            if self._display_pos.x() > screen.right() - 60:
+                self._display_pos = QPointF(self._locked_pos.x() - offset.x(),
+                                            self._locked_pos.y() - offset.y())
+            if self._display_pos.y() > screen.bottom() - 60:
+                self._display_pos = QPointF(self._locked_pos.x() - offset.x(),
+                                            self._locked_pos.y() - offset.y())
+            if self._display_pos.x() < screen.left() + 60:
+                self._display_pos = QPointF(self._locked_pos.x() + offset.x(),
+                                            self._locked_pos.y() + offset.y())
+            if self._display_pos.y() < screen.top() + 60:
+                self._display_pos = QPointF(self._locked_pos.x() + offset.x(),
+                                            self._locked_pos.y() + offset.y())
             if time.monotonic() >= self._dwell_until:
                 cursor_target = QPointF(real.x() + OFFSET_X, real.y() + OFFSET_Y)
                 self._begin_flight(self._display_pos, cursor_target, _PHASE_RETURNING)
