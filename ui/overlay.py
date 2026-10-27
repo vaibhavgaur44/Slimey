@@ -23,7 +23,27 @@ from PyQt6.QtGui import (
     QPainter, QColor, QPen, QBrush, QPainterPath, QCursor, QFont,
 )
 from PyQt6.QtSvg import QSvgRenderer
-from PyQt6.QtCore import QFileInfo
+from PyQt6.QtCore import QFileInfo, QDir, QSize
+from typing import Optional, Dict, Tuple
+import os
+
+# Asset directory — relative to the package, works in both dev and frozen PyInstaller
+_ASSET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets")
+
+# Mapped sprite file names per animation state (numbered 1..N)
+_ANIMATION_FRAMES: Dict[str, list[str]] = {
+    "idle": ["slimey_idle_{:02d}".format(i) for i in range(1, 5)],
+    "blink": ["slimey_blink_{:02d}".format(i) for i in range(1, 4)],
+    "listen": ["slimey_listen_{:02d}".format(i) for i in range(1, 2)],
+    "think": ["slimey_think_{:02d}".format(i) for i in range(1, 5)],
+    "speak": ["slimey_speak_{:02d}".format(i) for i in range(1, 4)],
+    "happy": ["slimey_happy_{:02d}".format(i) for i in range(1, 6)],
+    "error": ["slimey_error_{:02d}".format(i) for i in range(1, 4)],
+    "sleep": ["slimey_sleep_{:02d}".format(i) for i in range(1, 5)],
+}
+
+_renderer_cache: Dict[str, QSvgRenderer] = {}
+_loaded_sprites: Dict[str, Optional[QSvgRenderer]] = {}
 
 
 
@@ -38,12 +58,13 @@ OFFSET_X = 35
 OFFSET_Y = 25
 
 # Triangle bounding box edge (Swift: frame(width: 16, height: 16))
-TRI_SIZE = 16
+TRI_SIZE = 12  # 75% of original 16px triangle
 # Swift: .rotationEffect(.degrees(-35))
 TRI_ROTATION_DEG = -35.0
 
-# #3380FF
-CURSOR_BLUE = QColor(0x33, 0x80, 0xFF)
+# Slimey lime green accent color
+# Matched to the mascot's green coloring
+CURSOR_LIME = QColor(0x32, 0xCD, 0x32)
 
 # Slimey idle sprite (replaces triangle in idle/speaking/pointing modes)
 IDLE_SVG_PATH = "assets/slimey_idle_01.svg"
@@ -178,10 +199,90 @@ _PHASE_DWELLING  = "dwelling"
 _PHASE_RETURNING = "returning"
 
 
+class AnimationController:
+
+    def __init__(self):
+        self._frame: int = 0
+        self._frame_timer: float = 0.0
+        self._frame_delay: float = 0.15  # seconds per frame (~60 FPS animation)
+        self._loop: bool = True
+        self._state: str = "idle"
+        self._paused: bool = False
+
+    def set_state(self, state: str, *, loop: bool = True, frame_delay: float = 0.15):
+        """Set the animation state.
+
+        Args:
+            state: one of the keys in _ANIMATION_FRAMES dict
+            loop: whether to loop the animation indefinitely
+            frame_delay: seconds between frame advances (lower = faster)
+        """
+        self._state = state
+        self._loop = loop
+        self._frame_delay = frame_delay
+        self._frame = 0
+        self._frame_timer = 0.0
+
+    def update(self, dt: float):
+        """Advance animation frame by dt seconds.
+
+        Must be called each paint/tick interval when animation is active.
+        """
+        # Map MODE_* constants to _ANIMATION_FRAMES keys for the update check.
+        state_to_frames = {
+            "idle": "idle",
+            "listening": "listen",
+            "thinking": "think",
+            "speaking": "speak",
+        }
+        mapped_state = state_to_frames.get(self._state, self._state)
+        if self._paused or mapped_state not in _ANIMATION_FRAMES:
+            return
+        frames = _ANIMATION_FRAMES[mapped_state]
+        self._frame_timer += dt
+        if self._frame_timer >= self._frame_delay:
+            n_frames = len(frames)
+            self._frame = (self._frame + 1) % n_frames if self._loop else min(self._frame + 1, n_frames - 1)
+            self._frame_timer -= self._frame_delay
+
+    def current_frame_name(self) -> str:
+        """Return the file name (without .svg) of the current frame."""
+        # Map MODE_* constants to the corresponding _ANIMATION_FRAMES keys.
+        # The MODE_* constants match the conceptual state names, but _ANIMATION_FRAMES
+        # uses shorter keys (e.g. MODE_SPEAKING="speaking" maps to "speak").
+        state_to_frames = {
+            "idle": "idle",
+            "listening": "listen",
+            "thinking": "think",
+            "speaking": "speak",
+        }
+        mapped_state = state_to_frames.get(self._state, self._state)
+        frames = _ANIMATION_FRAMES.get(mapped_state, _ANIMATION_FRAMES["idle"])
+        return frames[self._frame % len(frames)]
+
+    def reset(self):
+        """Reset to first frame of current state."""
+        self._frame = 0
+        self._frame_timer = 0.0
+
+    def pause(self):
+        self._paused = True
+
+    def resume(self):
+        self._paused = False
+
+    def state(self) -> str:
+        return self._state
+
+
 class CursorOverlay(QWidget):
 
     def __init__(self):
         super().__init__()
+
+        # Animation controller for sprite states
+        self._anim = AnimationController()
+        self._anim.set_state("idle", loop=True, frame_delay=0.2)
 
         # Spring follow state
         self._display_pos = QPointF(0, 0)
@@ -239,9 +340,40 @@ class CursorOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self._cover_all_monitors()
 
-        # Seed position so we don't flash at (0, 0)
-        qp = QCursor.pos()
-        self._display_pos = QPointF(qp.x() + OFFSET_X, qp.y() + OFFSET_Y)
+        # Fixed home position: bottom-right corner, just above the taskbar
+        # Use screen geometry to compute a position that stays on-screen
+        # across resolutions, DPI scaling, and taskbar placement.
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtCore import QRectF
+        screen = QApplication.primaryScreen()
+        screen_geo = screen.geometry()
+        work_geo = screen.availableGeometry()  # area without taskbar
+        dpi_scale = screen.devicePixelRatio()  # scaling factor relative to 96 DPI
+
+        # Desired: 1.5–2 cm above taskbar, adjusted for scaling
+        # 1 cm ≈ 38 px at 96 DPI; scale by actual DPI scale factor
+        cm_to_px = 38.0 * dpi_scale
+        taskbar_gap = max(40.0, cm_to_px * 1.8)  # ~2 cm gap
+
+        # Position: right edge with small margin, bottom just above taskbar
+        margin_right = 60.0 * dpi_scale  # 75% of original 80px, keep fully visible
+        home_x = screen_geo.right() - margin_right
+        # Raise home position so the entire mascot is visible just above the taskbar.
+        # work_geo.bottom() is the y-coordinate just above the taskbar.
+        # Subtract mascot height (120px at 75% reduction) and a 15px gap.
+        mascot_height = 120.0
+        home_gap = 15.0  # pixels between mascot bottom and taskbar top
+        home_y = work_geo.bottom() - mascot_height - home_gap  # above taskbar with gap
+
+        # Clamp to screen bounds in case of unusual configurations
+        home_x = max(screen_geo.left() + 60, min(home_x, screen_geo.right() - 60))
+        home_y = max(screen_geo.top() + 60, min(home_y, screen_geo.bottom() - 60))
+
+        self._display_pos = QPointF(home_x, home_y)
+
+        # Fixed home position — authoritative, independent of mouse coords.
+        # Computed once at init and never recalculated from cursor position.
+        self._home_pos = QPointF(home_x, home_y)
 
         # 60 FPS
         self._tick_timer = QTimer(self)
@@ -257,6 +389,7 @@ class CursorOverlay(QWidget):
 
     def set_mode(self, mode: str):
         self._mode = mode
+        self._anim.set_state(mode)
 
     def set_audio_level(self, rms: float):
         # Match Swift easing: eased = pow(min(rms*2.85, 1), 0.76)
@@ -272,6 +405,7 @@ class CursorOverlay(QWidget):
         its triangle on that pixel — the highlight ring marks the exact spot."""
         # Buddy's tip should sit on the target pixel. The triangle is drawn
         # centred on _display_pos, so we just plant _display_pos there.
+        # When guiding from home, start flight from the fixed home position
         self._locked_pos = QPointF(x, y)
         self._bubble_text = label or random.choice(POINTER_PHRASES)
         self._bubble_scale = 0.5
@@ -280,6 +414,7 @@ class CursorOverlay(QWidget):
         self._ring = (x, y, 26.0)
         self._ring_phase = 0.0
         self._lock_timer.stop()   # dwell controlled by phase machine, not timer
+        # Start flight from the current _display_pos (home position) to the target
         self._begin_flight(self._display_pos, self._locked_pos, _PHASE_FLYING)
 
     def set_slow_mode(self, enabled: bool):
@@ -410,6 +545,9 @@ class CursorOverlay(QWidget):
         self._rotation_deg = TRI_ROTATION_DEG
         self._hold_dwell = False
         self._ring = None
+        # Return to the authoritative home position (not mouse cursor)
+        self._display_pos = self._home_pos
+        self._vel = QPointF(0, 0)
 
     def _tick(self):
         qp = QCursor.pos()
@@ -463,8 +601,32 @@ class CursorOverlay(QWidget):
             self._flight_scale = breathe
             self._bubble_alpha = min(1.0, self._bubble_alpha + 0.05)
             self._bubble_scale = self._bubble_scale + (1.0 - self._bubble_scale) * 0.15
-            # Stay planted on the element
-            self._display_pos = QPointF(self._locked_pos.x(), self._locked_pos.y())
+            # Stay planted on the element, but offset beside the target ring
+            # so the mascot doesn't obscure the target or "Right here" label.
+            # Offset diagonally down-right: mascot half-width + ring radius + margin
+            mascot_half = 60.0  # 120px diameter / 2 (75% reduced size)
+            ring_radius = 26.0
+            offset_x = mascot_half + ring_radius + 10.0  # right of ring
+            offset_y = mascot_half + ring_radius + 10.0  # below ring
+            offset = QPointF(offset_x, offset_y)
+            # Apply offset relative to locked target position
+            self._display_pos = QPointF(self._locked_pos.x() + offset.x(),
+                                        self._locked_pos.y() + offset.y())
+            # Keep Slimey on-screen: if offset pushes off right/bottom edge,
+            # reverse to top-left offset instead
+            screen = QApplication.primaryScreen().availableGeometry()
+            if self._display_pos.x() > screen.right() - 60:
+                self._display_pos = QPointF(self._locked_pos.x() - offset.x(),
+                                            self._locked_pos.y() - offset.y())
+            if self._display_pos.y() > screen.bottom() - 60:
+                self._display_pos = QPointF(self._locked_pos.x() - offset.x(),
+                                            self._locked_pos.y() - offset.y())
+            if self._display_pos.x() < screen.left() + 60:
+                self._display_pos = QPointF(self._locked_pos.x() + offset.x(),
+                                            self._locked_pos.y() + offset.y())
+            if self._display_pos.y() < screen.top() + 60:
+                self._display_pos = QPointF(self._locked_pos.x() + offset.x(),
+                                            self._locked_pos.y() + offset.y())
             if time.monotonic() >= self._dwell_until:
                 cursor_target = QPointF(real.x() + OFFSET_X, real.y() + OFFSET_Y)
                 self._begin_flight(self._display_pos, cursor_target, _PHASE_RETURNING)
@@ -495,23 +657,31 @@ class CursorOverlay(QWidget):
             self.update()
             return
 
-        # ── Normal cursor-follow spring ──
-        target = QPointF(real.x() + OFFSET_X, real.y() + OFFSET_Y)
-        stiffness, damping = 0.28, 0.62
+        # ── Fixed home position spring ──
+        # Keep Slimey at the bottom-right home position during idle.
+        # The home position was computed in __init__ using screen geometry.
+        # During target guidance, _flight_phase takes over and moves Slimey
+        # from home to the target and back.
+        # Use the authoritative home position, NOT mouse coordinates.
+        home_target = self._home_pos  # fixed home, independent of cursor
 
-        # Spring
-        ax = (target.x() - self._display_pos.x()) * stiffness
-        ay = (target.y() - self._display_pos.y()) * stiffness
-        self._vel = QPointF(self._vel.x() * damping + ax,
-                            self._vel.y() * damping + ay)
-        self._display_pos = QPointF(
-            self._display_pos.x() + self._vel.x(),
-            self._display_pos.y() + self._vel.y(),
-        )
+        # If not currently flying or dwelling, gently return to home if drifted
+        if self._flight_phase in (_PHASE_FOLLOW,) and self._vel.manhattanLength() > 1.0:
+            # Soft pull back to home position
+            stiffness, damping = 0.4, 0.7
+            ax = (home_target.x() - self._display_pos.x()) * stiffness
+            ay = (home_target.y() - self._display_pos.y()) * stiffness
+            self._vel = QPointF(self._vel.x() * damping + ax,
+                                self._vel.y() * damping + ay)
+        # If vel is very small, we're effectively at home
 
         self._phase += 0.10
         self._spin_phase += 0.14  # ~0.8s per rev @ 60fps matches Swift
         self._ring_phase += 0.08
+
+        # Advance animation frame based on tick interval (~16ms @ 60 FPS)
+        dt = 1.0 / 60.0
+        self._anim.update(dt)
 
         self.update()
 
@@ -534,18 +704,75 @@ class CursorOverlay(QWidget):
         cx = self._display_pos.x() - self.x()
         cy = self._display_pos.y() - self.y()
 
-        if self._mode == MODE_LISTENING:
-            self._draw_waveform(p, cx, cy)
-        elif self._mode == MODE_THINKING:
-            self._draw_spinner(p, cx, cy)
+        # Determine which animation state to show based on real application mode
+        # Use the animation controller's current state; fall back to idle if missing
+        anim_state = self._anim.state() if hasattr(self, "_anim") else "idle"
+
+        if anim_state == MODE_LISTENING:
+            # Render the listening sprite animation.
+            frame_name = self._anim.current_frame_name()
+            sprite_path = os.path.join(_ASSET_DIR, "{}.svg".format(frame_name))
+            if os.path.exists(sprite_path):
+                self._draw_sprite_from_svg(p, cx, cy, sprite_path)
+            else:
+                # Fall back to a simple pose if SVG missing
+                self._draw_triangle(p, cx, cy)
+        elif anim_state == MODE_THINKING:
+            # Render the thinking sprite animation.
+            frame_name = self._anim.current_frame_name()
+            sprite_path = os.path.join(_ASSET_DIR, "{}.svg".format(frame_name))
+            if os.path.exists(sprite_path):
+                self._draw_sprite_from_svg(p, cx, cy, sprite_path)
+            else:
+                # Fall back to a simple pose if SVG missing
+                self._draw_triangle(p, cx, cy)
+        elif anim_state == MODE_SPEAKING:
+            # Use the speaking animation from the controller
+            frame_name = self._anim.current_frame_name()
+            sprite_path = os.path.join(_ASSET_DIR, "{}.svg".format(frame_name))
+            if os.path.exists(sprite_path):
+                self._draw_sprite_from_svg(p, cx, cy, sprite_path)
+            else:
+                # Fall back to the old triangle if SVG missing
+                self._draw_triangle(p, cx, cy)
         else:
-            # idle, speaking, pointing — render Slimey idle sprite
-            self._draw_idle_sprite(p, cx, cy)
+            # idle, pointing, or any other state — use idle animation
+            frame_name = self._anim.current_frame_name()
+            sprite_path = os.path.join(_ASSET_DIR, "{}.svg".format(frame_name))
+            if os.path.exists(sprite_path):
+                self._draw_sprite_from_svg(p, cx, cy, sprite_path)
+            else:
+                # Fall back to the old triangle if SVG missing
+                self._draw_triangle(p, cx, cy)
 
         if self._locked_pos is not None and self._bubble_text:
             self._draw_bubble(p, cx, cy, self._bubble_text)
 
         p.end()
+
+    def _draw_sprite_from_svg(self, p, cx, cy, sprite_path: str):
+        """Render a named sprite SVG at the cursor position.
+
+        The SVG is 128×128; we render it at 160×160 logical pixels centered
+        at (cx, cy) for 2× visible size. Falls back gracefully if the file is missing.
+        """
+        if not os.path.exists(sprite_path):
+            # Fall back to the old triangle if SVG is missing
+            self._draw_triangle(p, cx, cy)
+            return
+        renderer = _renderer_cache.get(sprite_path)
+        if renderer is None:
+            try:
+                renderer = QSvgRenderer(sprite_path)
+                _renderer_cache[sprite_path] = renderer
+            except Exception:
+                self._draw_triangle(p, cx, cy)
+                return
+        # Render at 75% of original size: 120px for the smaller mascot display
+        p.save()
+        p.translate(cx, cy)
+        renderer.render(p, QRectF(-60.0, -60.0, 120.0, 120.0))
+        p.restore()
 
     def _draw_annotations(self, p):
         """Render teaching shapes with progressive draw-in animation.
@@ -573,7 +800,7 @@ class CursorOverlay(QWidget):
                     alpha = max(0.0, 1.0 - (age - ttl * 0.75) / (ttl * 0.25))
             keep.append(ann)
 
-            col = QColor(ANNOT_COLORS.get(ann.get("color", "blue"), CURSOR_BLUE))
+            col = QColor(ANNOT_COLORS.get(ann.get("color", "blue"), CURSOR_LIME))
             col.setAlpha(int(235 * alpha))
             kind = ann["kind"]
             try:
@@ -702,14 +929,14 @@ class CursorOverlay(QWidget):
         pulse = (math.sin(self._ring_phase) + 1) / 2   # 0..1
         r = base_r + pulse * 6
         # Outer halo
-        glow = QColor(CURSOR_BLUE)
+        glow = QColor(CURSOR_LIME)
         glow.setAlpha(60)
         pen = QPen(glow, 4)
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawEllipse(QPointF(rx, ry), r + 3, r + 3)
         # Crisp inner ring
-        inner = QColor(CURSOR_BLUE)
+        inner = QColor(CURSOR_LIME)
         inner.setAlpha(190)
         pen = QPen(inner, 2)
         p.setPen(pen)
@@ -732,8 +959,8 @@ class CursorOverlay(QWidget):
             return
         # Scale: the SVG is 128×128, old triangle was 16×16 ≈ 0.125 ratio
         # Use a modest visible size (~32×32 logical pixels)
-        # Scale to 2.5× the original size: 32 × 2.5 = 80 logical pixels
-        sprite_size = 80.0
+        # Scale to 2× the current displayed size: 60 × 2 = 120 logical pixels (75%)
+        sprite_size = 120.0
         p.save()
         p.translate(cx, cy)
         renderer.render(p, QRectF(-sprite_size / 2, -sprite_size / 2, sprite_size, sprite_size))
@@ -741,7 +968,7 @@ class CursorOverlay(QWidget):
 
     def _draw_glow(self, p, cx, cy, radius, color_alpha=90):
         """Cheap soft shadow approximating Swift's .shadow(radius: 8)."""
-        g = QColor(CURSOR_BLUE)
+        g = QColor(CURSOR_LIME)
         for i, r_mul in enumerate((1.6, 1.25, 1.0)):
             g.setAlpha(color_alpha // (i + 1))
             p.setBrush(QBrush(g))
@@ -764,7 +991,7 @@ class CursorOverlay(QWidget):
         p.translate(cx, cy)
 
         # Glow — drawn unrotated so it's a round halo
-        glow = QColor(CURSOR_BLUE)
+        glow = QColor(CURSOR_LIME)
         for i, (r_mul, alpha) in enumerate(((2.2, 35), (1.6, 55), (1.15, 85))):
             glow.setAlpha(alpha)
             p.setBrush(QBrush(glow))
@@ -773,7 +1000,7 @@ class CursorOverlay(QWidget):
 
         p.rotate(self._rotation_deg)
         p.scale(self._flight_scale, self._flight_scale)
-        p.setBrush(QBrush(CURSOR_BLUE))
+        p.setBrush(QBrush(CURSOR_LIME))
         p.setPen(Qt.PenStyle.NoPen)
         p.drawPath(path)
 
@@ -788,14 +1015,14 @@ class CursorOverlay(QWidget):
         total_w = bar_count * bar_w + (bar_count - 1) * spacing
 
         # Glow behind bars
-        glow = QColor(CURSOR_BLUE)
+        glow = QColor(CURSOR_LIME)
         for r_mul, a in ((2.0, 40), (1.3, 70)):
             glow.setAlpha(a)
             p.setBrush(QBrush(glow))
             p.setPen(Qt.PenStyle.NoPen)
             p.drawEllipse(QPointF(cx, cy), 10 * r_mul, 10 * r_mul)
 
-        p.setBrush(QBrush(CURSOR_BLUE))
+        p.setBrush(QBrush(CURSOR_LIME))
         p.setPen(Qt.PenStyle.NoPen)
 
         for i in range(bar_count):
@@ -813,14 +1040,14 @@ class CursorOverlay(QWidget):
         rect = QRectF(cx - diameter / 2, cy - diameter / 2, diameter, diameter)
 
         # Glow
-        glow = QColor(CURSOR_BLUE)
+        glow = QColor(CURSOR_LIME)
         for r_mul, a in ((2.0, 40), (1.3, 70)):
             glow.setAlpha(a)
             p.setBrush(QBrush(glow))
             p.setPen(Qt.PenStyle.NoPen)
             p.drawEllipse(QPointF(cx, cy), diameter * r_mul * 0.5, diameter * r_mul * 0.5)
 
-        pen = QPen(CURSOR_BLUE, 2.5)
+        pen = QPen(CURSOR_LIME, 2.5)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
@@ -852,9 +1079,9 @@ class CursorOverlay(QWidget):
         p.translate(-box_x, -(box_y + th / 2))
 
         a = int(255 * self._bubble_alpha)
-        bg = QColor(CURSOR_BLUE)
+        bg = QColor(CURSOR_LIME)
         bg.setAlpha(a)
-        glow = QColor(CURSOR_BLUE)
+        glow = QColor(CURSOR_LIME)
         glow.setAlpha(int(90 * self._bubble_alpha))
 
         # Glow

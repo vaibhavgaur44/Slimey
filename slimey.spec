@@ -78,8 +78,37 @@ for pkg in (
     except Exception:
         pass  # package not installed — that path is optional anyway
 
-# Slimey idle sprite asset (replaces triangle cursor graphic)
-datas += (("assets/slimey_idle_01.svg", "assets/slimey_idle_01.svg"),)
+# Slimey sprite animation assets (replaces triangle cursor graphic)
+_ANIMATION_SVG_FILES = [
+    ("assets/slimey_idle_01.svg", "assets/slimey_idle_01.svg"),
+    ("assets/slimey_idle_02.svg", "assets/slimey_idle_02.svg"),
+    ("assets/slimey_idle_03.svg", "assets/slimey_idle_03.svg"),
+    ("assets/slimey_idle_04.svg", "assets/slimey_idle_04.svg"),
+    ("assets/slimey_blink_01.svg", "assets/slimey_blink_01.svg"),
+    ("assets/slimey_blink_02.svg", "assets/slimey_blink_02.svg"),
+    ("assets/slimey_blink_03.svg", "assets/slimey_blink_03.svg"),
+    ("assets/slimey_listen_01.svg", "assets/slimey_listen_01.svg"),
+    ("assets/slimey_think_01.svg", "assets/slimey_think_01.svg"),
+    ("assets/slimey_think_02.svg", "assets/slimey_think_02.svg"),
+    ("assets/slimey_think_03.svg", "assets/slimey_think_03.svg"),
+    ("assets/slimey_think_04.svg", "assets/slimey_think_04.svg"),
+    ("assets/slimey_speak_01.svg", "assets/slimey_speak_01.svg"),
+    ("assets/slimey_speak_02.svg", "assets/slimey_speak_02.svg"),
+    ("assets/slimey_speak_03.svg", "assets/slimey_speak_03.svg"),
+    ("assets/slimey_happy_01.svg", "assets/slimey_happy_01.svg"),
+    ("assets/slimey_happy_02.svg", "assets/slimey_happy_02.svg"),
+    ("assets/slimey_happy_03.svg", "assets/slimey_happy_03.svg"),
+    ("assets/slimey_happy_04.svg", "assets/slimey_happy_04.svg"),
+    ("assets/slimey_happy_05.svg", "assets/slimey_happy_05.svg"),
+    ("assets/slimey_error_01.svg", "assets/slimey_error_01.svg"),
+    ("assets/slimey_error_02.svg", "assets/slimey_error_02.svg"),
+    ("assets/slimey_error_03.svg", "assets/slimey_error_03.svg"),
+    ("assets/slimey_sleep_01.svg", "assets/slimey_sleep_01.svg"),
+    ("assets/slimey_sleep_02.svg", "assets/slimey_sleep_02.svg"),
+    ("assets/slimey_sleep_03.svg", "assets/slimey_sleep_03.svg"),
+    ("assets/slimey_sleep_04.svg", "assets/slimey_sleep_04.svg"),
+]
+datas += tuple(_ANIMATION_SVG_FILES)
 
 hiddenimports += hidden
 hiddenimports += collect_submodules("PyQt6")
