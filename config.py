@@ -422,12 +422,24 @@ class Config:
         except ImportError:
             return "faster_whisper"
 
+
     def tts_provider(self) -> str:
+        forced = (
+            os.getenv("SLIMEY_TTS")
+            or os.getenv("CLICKY_TTS", "")
+        ).strip().lower()
+    
+        if forced in ("edge_tts", "openai", "elevenlabs"):
+            return forced
+    
         if self.elevenlabs_api_key:
             return "elevenlabs"
+    
         if self.openai_api_key:
             return "openai"
+
         return "edge_tts"
+
 
     def search_provider(self) -> str:
         if self.tavily_api_key:
